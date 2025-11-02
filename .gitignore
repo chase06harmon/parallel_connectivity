@@ -18,6 +18,9 @@ gbbs.pyc
 .ycm_extra_conf.py
 __pycache__
 
+timings/
+snap_inputs/
+
 # Leftover files from switching from website branch to code branch
 .docusaurus/
 node_modules/
