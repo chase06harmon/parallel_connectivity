@@ -25,3 +25,9 @@ cc_binary(
     srcs = ["Comparison.cc"],
     deps = [":Connectivity"],
 )
+
+cc_binary(
+    name = "Sparse2Dense",
+    srcs = ["Sparse2Dense.cc"],
+    deps = [":Connectivity"],
+)
