@@ -59,21 +59,41 @@ inline uintE peek_root(const sequence<parent>& parents, uintE v) {
     v = p;
   }
 }
-
 inline sequence<parent> canonicalize_labels(const sequence<parent>& labels) {
-  std::unordered_map<parent, parent> remap;
-  sequence<parent> result(labels.size());
-  parent next = 0;
-  for (size_t i = 0; i < labels.size(); ++i) {
-    parent lbl = labels[i];
-    auto it = remap.find(lbl);
-    if (it == remap.end()) {
-      it = remap.emplace(lbl, next++).first;
-    }
-    result[i] = it->second;
-  }
-  return result;
+  const size_t n = labels.size();
+  if (n == 0) return sequence<parent>();
+
+  // Domain is 0..n-1 for CC roots; if not guaranteed, compute max label first.
+  const size_t dom = n;
+
+  // first_pos[l] = earliest index where label l appears; n means absent.
+  sequence<size_t> first_pos(dom, n);
+  gbbs::parallel_for(0, n, [&](size_t i) {
+    parent l = labels[i];
+    gbbs::write_min<size_t>(&first_pos[l], i);  // atomic min
+  });
+
+  // Collect present labels.
+  auto present = parlay::filter(parlay::iota<parent>(dom),
+                                [&](parent l){ return first_pos[l] != n; });
+
+  // Sort present labels by their first appearance (radix/integer sort is ideal here).
+  parlay::integer_sort_inplace(present, [&](parent l){ return (uint64_t)first_pos[l]; });
+
+  // id_for_label[l] = rank of l by first appearance.
+  sequence<parent> id_for_label(dom, std::numeric_limits<parent>::max());
+  gbbs::parallel_for(0, present.size(), [&](size_t i){
+    id_for_label[present[i]] = (parent)i;
+  });
+
+  // Produce output mapping.
+  sequence<parent> out(n);
+  gbbs::parallel_for(0, n, [&](size_t i){
+    out[i] = id_for_label[labels[i]];
+  });
+  return out;
 }
+
 
 inline bool is_root(const sequence<parent>& parents, uintE v) {
   return parents[v] == v;
@@ -776,8 +796,21 @@ ComparisonStats BenchmarkPair(Graph& G, double beta, bool permute,
   auto gazit_components = CC(G, params);
   stats.gazit_time = gazit_timer.stop();
 
+  std::cerr << "[comparison] Canonicalizing WorkEfficient labels" << std::endl;
+  timer work_canon_timer;
+  work_canon_timer.start();
   auto work_labels = internal::canonicalize_labels(work_components);
+  double work_canon_time = work_canon_timer.stop();
+  std::cerr << "[comparison] WorkEfficient canonicalization completed in "
+            << work_canon_time << "s" << std::endl;
+
+  std::cerr << "[comparison] Canonicalizing Gazit labels" << std::endl;
+  timer gazit_canon_timer;
+  gazit_canon_timer.start();
   auto gazit_labels = internal::canonicalize_labels(gazit_components);
+  double gazit_canon_time = gazit_canon_timer.stop();
+  std::cerr << "[comparison] Gazit canonicalization completed in "
+            << gazit_canon_time << "s" << std::endl;
   if (work_labels != gazit_labels) {
     if (G.n <= 128) {
       std::cerr << "work labels:";
