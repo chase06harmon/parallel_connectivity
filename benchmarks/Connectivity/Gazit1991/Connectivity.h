@@ -11,7 +11,6 @@
 #include <numeric>
 #include <unordered_map>
 #include <utility>
-#include <atomic>
 #include <thread>
 #include <barrier>
 #include <vector>
@@ -19,7 +18,9 @@
 #include "benchmarks/Connectivity/WorkEfficientSDB14/Connectivity.h"
 #include "benchmarks/Connectivity/common.h"
 #include "gbbs/gbbs.h"
+#include "parlay/delayed_sequence.h"
 #include "parlay/primitives.h"
+#include "parlay/random.h"
 #include "parlay/sequence.h"
 
 namespace gbbs {
@@ -84,28 +85,273 @@ inline bool depth_leq_one(const sequence<parent>& parents, uintE v) {
 
 inline sequence<Edge> rebuild_edges(sequence<parent>& parents,
                                     const sequence<Edge>& original) {
-  size_t count = 0;
-  for (const auto& [u, v] : original) {
-    uintE ru = find_root(parents, u);
-    uintE rv = find_root(parents, v);
-    if (ru == rv) continue;
-    if (ru > rv) std::swap(ru, rv);
-    ++count;
+  const size_t m = original.size();
+  if (m == 0) {
+    return sequence<Edge>();
   }
 
+  auto root_edges = sequence<Edge>::uninitialized(m);
+  auto flags = sequence<size_t>(m + 1, static_cast<size_t>(0));
+
+  gbbs::parallel_for(0, m, [&](size_t i) {
+    const auto [u, v] = original[i];
+    uintE ru = find_root(parents, u);
+    uintE rv = find_root(parents, v);
+    if (ru == rv) {
+      flags[i] = 0;
+    } else {
+      flags[i] = 1;
+      root_edges[i] = Edge{ru, rv};
+    }
+  });
+
+  size_t count = parlay::scan_inplace(parlay::make_slice(flags));
   sequence<Edge> edges(count);
-  size_t idx = 0;
-  for (const auto& [u, v] : original) {
-    uintE ru = find_root(parents, u);
-    uintE rv = find_root(parents, v);
-    if (ru == rv) continue;
-    if (ru > rv) std::swap(ru, rv);
-    edges[idx++] = Edge{ru, rv};
+
+  gbbs::parallel_for(0, m, [&](size_t i) {
+    if (flags[i] != flags[i + 1]) {
+      edges[flags[i]] = root_edges[i];
+    }
+  });
+
+  return edges;
+}
+
+struct DenseToEasyResult {
+  sequence<parent> parents;
+  sequence<Edge> root_edges;
+};
+
+inline sequence<size_t> sample_indices(size_t m, size_t k, uint64_t seed) {
+  sequence<size_t> idx(k);
+  parlay::random rng(seed);
+  gbbs::parallel_for(0, k, [&](size_t i) {
+    auto local_rng = rng.fork(i);
+    idx[i] = local_rng.ith_rand(0) % m;
+  });
+  return idx;
+}
+
+inline void halve_once(sequence<parent>& P) {
+  size_t n = P.size();
+  gbbs::parallel_for(0, n, [&](size_t i) {
+    P[i] = P[P[i]];
+  });
+}
+
+inline DenseToEasyResult dense_to_easy(size_t n,
+                                       const sequence<Edge>& original_edges,
+                                       const GazitParams& params) {
+  sequence<parent> P(n);
+  gbbs::parallel_for(0, n, [&](size_t i) { P[i] = static_cast<parent>(i); });
+
+  const size_t m = original_edges.size();
+  if (m == 0 || n == 0) {
+    return DenseToEasyResult{std::move(P), sequence<Edge>()};
   }
 
-  auto edges_slice = parlay::make_slice(edges);
-  parlay::sort_inplace(edges_slice);
-  return parlay::unique(edges_slice);
+  sequence<uint8_t> ext(n, static_cast<uint8_t>(1));
+  sequence<uint8_t> got_incoming(n, static_cast<uint8_t>(0));
+
+  const double alpha = (params.alpha > 1.0) ? params.alpha : 1.5;
+  const size_t P_budget =
+      (params.processor_budget > 0) ? params.processor_budget
+                                    : std::max<size_t>(1, static_cast<size_t>(std::thread::hardware_concurrency()));
+  const size_t max_rounds = (params.max_rounds > 0)
+      ? params.max_rounds
+      : static_cast<size_t>(std::max<double>(
+            1.0,
+            std::ceil(std::log(static_cast<double>(std::max<size_t>(n, 2))) / std::log(1.5))));
+
+  for (size_t round = 0; round < max_rounds; ++round) {
+    halve_once(P);
+
+    gbbs::parallel_for(0, n, [&](size_t i) { got_incoming[i] = 0; });
+
+    size_t sample_size = std::max<size_t>(
+        P_budget,
+        static_cast<size_t>(std::ceil(static_cast<double>(m) / std::pow(alpha, static_cast<double>(round))))
+    );
+    sample_size = std::min(sample_size, m);
+
+    if (sample_size == 0) break;
+
+    auto sample = sample_indices(m, sample_size, params.seed + static_cast<uint64_t>(round) * 0x9e3779b97f4a7c15ULL);
+
+    gbbs::parallel_for(0, sample_size, [&](size_t si) {
+      const auto [u0, v0] = original_edges[sample[si]];
+      uintE ru = peek_root(P, u0);
+      uintE rv = peek_root(P, v0);
+      if (ru == rv) return;
+
+      if ((ext[ru] ^ ext[rv]) == 0) return;
+
+      bool u_child_of_root = depth_leq_one(P, u0);
+      bool v_child_of_root = depth_leq_one(P, v0);
+      if (!(u_child_of_root && v_child_of_root)) return;
+
+      uintE r_u = P[u0];
+      uintE r_v = P[v0];
+      if (r_u == r_v) return;
+
+      uintE hi = (r_u > r_v) ? r_u : r_v;
+      uintE lo = hi ^ r_u ^ r_v;
+
+      if (gbbs::CAS<parent>(&P[hi], static_cast<parent>(hi), static_cast<parent>(lo))) {
+        gbbs::write_max<uint8_t>(&got_incoming[hi], static_cast<uint8_t>(1));
+        gbbs::write_max<uint8_t>(&got_incoming[lo], static_cast<uint8_t>(1));
+      }
+    });
+
+    gbbs::parallel_for(0, sample_size, [&](size_t si) {
+      const auto [u0, v0] = original_edges[sample[si]];
+      uintE ru = peek_root(P, u0);
+      uintE rv = peek_root(P, v0);
+      if (ru == rv) return;
+
+      if ((ext[ru] | ext[rv]) == 0) return;
+
+      if (depth_leq_one(P, u0)) {
+        uintE r = P[u0];
+        if (got_incoming[r] == 0 && r != rv) {
+          uintE hi = (r > rv) ? r : rv;
+          uintE lo = hi ^ r ^ rv;
+          if (gbbs::CAS<parent>(&P[hi], static_cast<parent>(hi), static_cast<parent>(lo))) {
+            gbbs::write_max<uint8_t>(&got_incoming[hi], static_cast<uint8_t>(1));
+          }
+        }
+      }
+
+      if (depth_leq_one(P, v0)) {
+        uintE r = P[v0];
+        if (got_incoming[r] == 0 && r != ru) {
+          uintE hi = (r > ru) ? r : ru;
+          uintE lo = hi ^ r ^ ru;
+          if (gbbs::CAS<parent>(&P[hi], static_cast<parent>(hi), static_cast<parent>(lo))) {
+            gbbs::write_max<uint8_t>(&got_incoming[hi], static_cast<uint8_t>(1));
+          }
+        }
+      }
+    });
+
+    halve_once(P);
+
+    gbbs::parallel_for(0, n, [&](size_t i) {
+      if (P[i] == i && got_incoming[i] == 0) {
+        ext[i] = 0;
+      }
+    });
+
+    bool any_ext = parlay::any_of(
+        parlay::delayed_seq<bool>(n, [&](size_t i) {
+          return (P[i] == i) && (got_incoming[i] != 0);
+        }),
+        [](bool v) { return v; });
+    if (!any_ext) break;
+  }
+
+  gbbs::parallel_for(0, n, [&](size_t i) { find_root(P, static_cast<uintE>(i)); });
+
+  auto root_edges = rebuild_edges(P, original_edges);
+
+  return DenseToEasyResult{std::move(P), std::move(root_edges)};
+}
+
+inline sequence<parent> easy_case_from(size_t n,
+                                       const sequence<Edge>& edges,
+                                       sequence<parent> P) {
+  sequence<parent> Scratch(n);
+
+  const uintE kInvalid = std::numeric_limits<uintE>::max();
+  sequence<uint8_t> was_root(n);
+  sequence<uintE>   child_root(n);
+  sequence<uint8_t> leaf_of_root(n);
+  sequence<uint8_t> got_incoming(n);
+
+  auto halve = [&](sequence<parent>& in, sequence<parent>& out) {
+    gbbs::parallel_for(0, n, [&](size_t i) { out[i] = in[in[i]]; });
+  };
+
+  auto peek_root_now = [&](uintE x, const sequence<parent>& A) {
+    while (true) {
+      uintE p  = A[x];
+      uintE gp = A[p];
+      if (p == gp) return p;
+      x = p;
+    }
+  };
+
+  while (true) {
+    halve(P, Scratch);
+    std::swap(P, Scratch);
+
+    gbbs::parallel_for(0, n, [&](size_t i) {
+      got_incoming[i] = 0;
+      parent p = P[i];
+      was_root[i] = (p == i);
+      uintE rp = P[p];
+      child_root[i] = (rp == p) ? p : kInvalid;
+    });
+
+    gbbs::parallel_for(0, edges.size(), [&](size_t ei) {
+      auto [u, v] = edges[ei];
+      uintE ru = child_root[u];
+      uintE rv = child_root[v];
+      if (ru == kInvalid || rv == kInvalid || ru == rv) return;
+      uintE hi = (ru > rv) ? ru : rv;
+      uintE lo = hi ^ ru ^ rv;
+      gbbs::write_min<parent>(&P[hi], static_cast<parent>(lo));
+    });
+
+    gbbs::parallel_for(0, n, [&](size_t i) {
+      if (was_root[i]) {
+        parent to = P[i];
+        if (to != i) {
+          gbbs::write_max<uint8_t>(&got_incoming[to], static_cast<uint8_t>(1));
+        }
+      }
+      parent p = P[i];
+      leaf_of_root[i] = (p != i) && (P[p] == p);
+    });
+
+    gbbs::parallel_for(0, edges.size(), [&](size_t ei) {
+      auto [u, v] = edges[ei];
+      bool ul = leaf_of_root[u];
+      bool vl = leaf_of_root[v];
+      if (ul == vl) return;
+
+      uintE star_root = ul ? static_cast<uintE>(P[u]) : static_cast<uintE>(P[v]);
+      if (got_incoming[star_root]) return;
+      uintE other = ul ? v : u;
+
+      uintE other_root = peek_root_now(other, P);
+      if (other_root == star_root) return;
+
+      gbbs::CAS<parent>(&P[star_root],
+                        static_cast<parent>(star_root),
+                        static_cast<parent>(other_root));
+    });
+
+    halve(P, Scratch);
+    std::swap(P, Scratch);
+
+    bool any_deep = parlay::any_of(
+        parlay::delayed_seq<bool>(n, [&](size_t i) {
+          return P[P[i]] != P[i];
+        }),
+        [](bool v) { return v; });
+    if (any_deep) continue;
+
+    bool any_live = parlay::any_of(
+        parlay::delayed_seq<bool>(edges.size(), [&](size_t ei) {
+          auto [u, v] = edges[ei];
+          return P[u] != P[v];
+        }),
+        [](bool v) { return v; });
+    if (!any_live) break;
+  }
+
+  return P;
 }
 
 inline int serial_1(uintE a, uintE b) {
@@ -344,9 +590,8 @@ inline sequence<parent> easy_case(size_t n, const sequence<Edge>& edges) {
     halve(P, Scratch);
     std::swap(P, Scratch);
 
-    gbbs::parallel_for(0, n, [&](size_t i) { got_incoming[i] = 0; });
-
     gbbs::parallel_for(0, n, [&](size_t i) {
+      got_incoming[i] = 0;
       parent p = P[i];
       was_root[i] = (p == i);
       uintE rp = P[p];
@@ -363,16 +608,13 @@ inline sequence<parent> easy_case(size_t n, const sequence<Edge>& edges) {
       gbbs::write_min<parent>(&P[hi], static_cast<parent>(lo));
     });
 
-    gbbs::parallel_for(0, n, [&](size_t r) {
-      if (was_root[r]) {
-        parent to = P[r];
-        if (to != r) {
+    gbbs::parallel_for(0, n, [&](size_t i) {
+      if (was_root[i]) {
+        parent to = P[i];
+        if (to != i) {
           gbbs::write_max<uint8_t>(&got_incoming[to], static_cast<uint8_t>(1));
         }
       }
-    });
-
-    gbbs::parallel_for(0, n, [&](size_t i) {
       parent p = P[i];
       leaf_of_root[i] = (p != i) && (P[p] == p);
     });
@@ -398,20 +640,20 @@ inline sequence<parent> easy_case(size_t n, const sequence<Edge>& edges) {
     halve(P, Scratch);
     std::swap(P, Scratch);
 
-    std::atomic<bool> any_deep(false);
-    gbbs::parallel_for(0, n, [&](size_t i) {
-      if (any_deep.load(std::memory_order_relaxed)) return;
-      if (P[P[i]] != P[i]) any_deep.store(true, std::memory_order_relaxed);
-    });
-    if (any_deep.load(std::memory_order_relaxed)) continue;
+    bool any_deep = parlay::any_of(
+        parlay::delayed_seq<bool>(n, [&](size_t i) {
+          return P[P[i]] != P[i];
+        }),
+        [](bool v) { return v; });
+    if (any_deep) continue;
 
-    std::atomic<bool> any_live(false);
-    gbbs::parallel_for(0, edges.size(), [&](size_t ei) {
-      if (any_live.load(std::memory_order_relaxed)) return;
-      auto [u, v] = edges[ei];
-      if (P[u] != P[v]) any_live.store(true, std::memory_order_relaxed);
-    });
-    if (!any_live.load(std::memory_order_relaxed)) break;
+    bool any_live = parlay::any_of(
+        parlay::delayed_seq<bool>(edges.size(), [&](size_t ei) {
+          auto [u, v] = edges[ei];
+          return P[u] != P[v];
+        }),
+        [](bool v) { return v; });
+    if (!any_live) break;
   }
 
   return P;
@@ -493,13 +735,20 @@ sequence<parent> CC(const Graph& G, GazitParams params = GazitParams()) {
     return internal::Edge{u, v};
   });
 
-  if (params.deduplicate_edges) {
-    auto edges_slice = parlay::make_slice(edges);
-    parlay::sort_inplace(edges_slice);
-    edges = parlay::unique(edges_slice);
+  std::cout << "[gazit] edges before dense_to_easy: "
+            << edges.size() << std::endl;
+  auto de = internal::dense_to_easy(n, edges, params);
+  std::cout << "[gazit] edges after dense_to_easy: "
+            << de.root_edges.size() << std::endl;
+
+  if (de.root_edges.size() == 0) {
+    gbbs::parallel_for(0, n, [&](size_t i) {
+      internal::find_root(de.parents, static_cast<uintE>(i));
+    });
+    return de.parents;
   }
 
-  auto parents = internal::easy_case(n, edges);
+  auto parents = internal::easy_case_from(n, de.root_edges, std::move(de.parents));
 
   gbbs::parallel_for(0, n, [&](size_t i) {
     internal::find_root(parents, static_cast<uintE>(i));
