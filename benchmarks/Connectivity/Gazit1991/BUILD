@@ -6,7 +6,7 @@ package(
 
 cc_library(
     name = "Connectivity",
-    hdrs = ["Connectivity.h"],
+    hdrs = ["Connectivity.h", "Connectivity_Tests.h"],
     deps = [
         "//benchmarks/Connectivity:common",
         "//benchmarks/Connectivity/WorkEfficientSDB14:Connectivity",
@@ -29,5 +29,11 @@ cc_binary(
 cc_binary(
     name = "Sparse2Dense",
     srcs = ["Sparse2Dense.cc"],
+    deps = [":Connectivity"],
+)
+
+cc_binary(
+    name = "TestRunner_main",
+    srcs = ["TestRunner.cc"],
     deps = [":Connectivity"],
 )
