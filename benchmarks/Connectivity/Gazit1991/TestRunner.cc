@@ -14,7 +14,9 @@ double TestRunner(Graph& G, commandLine P) {
 
     timer t;
     t.start();
-    test_sample_edges(G);
+    // test_sample_edges(G);
+    // test_paritioning(G);
+    test_sparse_to_dense(G);
     double elapsed = t.stop();
 
     std::cout << "### Running Time: " << elapsed << std::endl;

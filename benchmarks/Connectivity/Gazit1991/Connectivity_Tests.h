@@ -161,5 +161,42 @@ void test_sample_edges(Graph & G) {
 
 }
 
+template<class Graph>
+void test_paritioning(Graph & G) {
+  auto E = parlay::map(G.edges(), [](const auto& entry) {
+    uintE u, v; gbbs::empty _;
+    std::tie(u, v, _) = entry;
+    return internal::Edge{u, v};
+  });
+
+  sequence<uintE> V = sequence<uintE>(G.n);
+  parallel_for(0, G.n, [&](size_t i){V[i] = i;});
+
+  auto results = internal::gazit_partitioning(V, E, G.n);
+
+  std::cout << "extrovert size: " << parlay::reduce(results.extrovert_flag) << std::endl;
+  std::cout << "new edges size: " << E.size() << std::endl;
+
+}
+
+template<class Graph>
+void test_sparse_to_dense(Graph & G) {
+  sequence<parent> P(G.n); 
+
+  gbbs::parallel_for(0, G.n, [&](size_t i) {
+    P[i] = i;
+  });
+  auto [V, E] = internal::sparse_to_dense(G, P);
+//   std::cout << "extrovert size: " << parlay::reduce(results.extrovert_flag) << std::endl;
+  
+
+  for (auto [u,v] : E) {
+    if (internal::get_root(u, P) == internal::get_root(v,P)) {
+        std::cout << "ERROR ERROR ERROR" << std::endl;
+    }
+  }
+
+}
+
 }
 }
