@@ -91,10 +91,11 @@ case "${DATASET}" in
     ;;
   github|musae-github|github_social)
     SNAP_URL="https://snap.stanford.edu/data/git_web_ml.zip"
-    SNAP_FILE="github/musae_git_edges.csv"
+    SNAP_FILE="git_web_ml/musae_git_edges.csv"
+    LOCAL_CSV_NAME="musae_git_edges.csv"
     SNAP_CONVERTER_FLAGS=(--symmetric)
     SNAP_IS_DIRECTED=false
-    RAW_PATH="${SNAP_DIR}/${SNAP_FILE}"
+    RAW_PATH="${SNAP_DIR}/${LOCAL_CSV_NAME}"
     NEEDS_COMPRESSED=false
     CONVERT_FROM_CSV=true
     ;;
@@ -136,6 +137,19 @@ if [[ -n "${SNAP_URL}" ]]; then
       echo "Decompressing ${GZ_ARCHIVE}"
       gunzip -c "${GZ_ARCHIVE}" > "${RAW_PATH}"
     fi
+  elif [[ "${SNAP_URL}" == *.zip ]]; then
+    ZIP_ARCHIVE="${SNAP_DIR}/$(basename "${SNAP_URL}")"
+    if [[ ! -f "${ZIP_ARCHIVE}" ]]; then
+      echo "Downloading ${SNAP_URL}"
+      curl -L "${SNAP_URL}" -o "${ZIP_ARCHIVE}"
+    else
+      echo "Found existing archive ${ZIP_ARCHIVE}"
+    fi
+    if [[ ! -f "${RAW_PATH}" ]]; then
+      echo "Extracting ${SNAP_FILE} from ${ZIP_ARCHIVE} -> ${RAW_PATH}"
+      # Use the inner path SNAP_FILE (e.g., git_web_ml/musae_git_edges.csv)
+      unzip -p "${ZIP_ARCHIVE}" "${SNAP_FILE}" > "${RAW_PATH}"
+    fi
   else
     if [[ ! -f "${RAW_PATH}" ]]; then
       echo "Downloading ${SNAP_URL}"
@@ -145,6 +159,7 @@ if [[ -n "${SNAP_URL}" ]]; then
 else
   echo "Using local graph ${RAW_PATH}"
 fi
+
 
 if [[ ! -f "${RAW_PATH}" ]]; then
   echo "Failed to materialize raw SNAP graph at ${RAW_PATH}" >&2
