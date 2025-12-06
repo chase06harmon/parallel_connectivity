@@ -767,7 +767,8 @@ inline PartitioningResult gazit_partitioning(
   sequence<uintE>& V,
   sequence<Edge>& E,
   sequence<Edge>& E_graph,
-  int big_n
+  int big_n,
+  sequence<parent>& global_p
 ) {
   double alpha = 0.4;
   int n = V.size();
@@ -838,7 +839,21 @@ inline PartitioningResult gazit_partitioning(
   reassign_edges(P, E_graph);
   reassign_edges(P, E);
 
-  sequence<int> extrovert_flag = parlay::map(flag, [&](int x){ return x == rounds + 1 ? 1 : 0;});
+  // sequence<int> extrovert_flag = parlay::map(flag, [&](int x){ return x == rounds + 1 ? 1 : 0;});
+
+  sequence<int> extrovert_flag(big_n, 0);
+
+  gbbs::parallel_for(0, big_n, [&](size_t i) {
+    if (P[i] != -1 && get_root(i,P) != i) {
+      extrovert_flag[get_root(i, P)] = 1;
+    }
+  });
+
+  gbbs::parallel_for(0, n, [&](size_t i){
+    uintE v = V[i];
+    parent p = get_root(v, P);
+    global_p[v] = p;
+  });
 
   return PartitioningResult{
     std::move(extrovert_flag),
@@ -864,6 +879,7 @@ std::pair<sequence<uintE>, sequence<Edge>> sparse_to_dense(Graph & G, sequence<p
 
   auto V_i = V;
   auto E_i = E;
+  auto E_orig = E;
   // sequence<Edge> E_cum;
 
   // for (auto & [u,v] : E) {
@@ -893,7 +909,7 @@ std::pair<sequence<uintE>, sequence<Edge>> sparse_to_dense(Graph & G, sequence<p
     // std::cout << "V[0] r" << i << ": " << V_i[0] << std::endl;
     // std::cout << "extro[0] r" << i << ": " << extrovert_set[0] << std::endl;
     // std::cout << "extro[23977] r" << i << ": " << extrovert_set[23977] << std::endl;
-    PartitioningResult partition_result = gazit_partitioning(V_i, E_i, E, n);
+    PartitioningResult partition_result = gazit_partitioning(V_i, E_i, E, n, P);
     // for (auto & [u,v] : E_i) {
     //   if (u == 0 || v == 0) {
     //     std::cout << u << ", " << v << std::endl;
@@ -902,13 +918,13 @@ std::pair<sequence<uintE>, sequence<Edge>> sparse_to_dense(Graph & G, sequence<p
     // }
     extrovert_flag = std::move(partition_result.extrovert_flag);
 
-    if (i <= rounds -1) {
-      gbbs::parallel_for(0, V_i.size(), [&](size_t i) {
-        uintE v = V_i[i];
-        if (extrovert_flag[v])
-          extrovert_set[v] = 1;
-      });
+    gbbs::parallel_for(0, V_i.size(), [&](size_t i) {
+      uintE v = V_i[i];
+      if (extrovert_flag[v])
+        extrovert_set[v] = 1;
+    });
 
+    if (i <= rounds -1) {
       sequence<bool> introvert_not_isolated(n, 0);
       sequence<bool> include_in_E_i(E_i.size(), 0);
 
@@ -932,21 +948,21 @@ std::pair<sequence<uintE>, sequence<Edge>> sparse_to_dense(Graph & G, sequence<p
   //   return ! extrovert_set[i];
   // }));
 
-  // gbbs::parallel_for(0, E.size(), [&](size_t i){
-  //   auto [u, v] = E[i];
-  //   if (extrovert_set[u] && !extrovert_set[v]) {
-  //     P[v] = u;
-  //   } else if (extrovert_set[v] && !extrovert_set[u]) {
-  //     P[u] = v;
-  //   }
-  // });
+  gbbs::parallel_for(0, E.size(), [&](size_t i){
+    auto [u, v] = E[i];
+    if (extrovert_set[u] && !extrovert_set[v]) {
+      P[v] = u;
+    } else if (extrovert_set[v] && !extrovert_set[u]) {
+      P[u] = v;
+    }
+  });
 
   // std::cout << "P[0] final: " << P[0] << std::endl; // --
 
   // std::cout << "extro[0]" << extrovert_set[0] << std::endl;
 
 
-  // reassign_edges(P, E);
+  reassign_edges(P, E);
 
   gbbs::parallel_for(0, V_i.size(), [&](size_t i) {
     uintE v = V_i[i];
@@ -1131,17 +1147,29 @@ sequence<parent> CC(const Graph& G, GazitParams params = GazitParams()) {
 
   auto [V, E] = internal::sparse_to_dense(G, P);
 
-  for (int i = 0; i < 100; i++) {
-    std::cerr << "i: " << i << " P[i]: " << P[i] << std::endl;
-  }
-
-  sequence<int> map(n, -1);
+  sequence<int> v_map(n, -1);
   int n2 = V.size();
   int m2 = E.size();
 
   gbbs::parallel_for(0, n2, [&](size_t i) {
-    map[V[i]] = i;
+    v_map[V[i]] = i;
   });
+
+  for (int i = 0; i < n; i++) {
+    if (v_map[P[i]] == -1) {
+      std::cerr << "Didn't keep parent of " << i << ": " << P[i] << std::endl;
+      int num_edges = 0;
+      for (int j = 0; j < m2; j++) {
+        auto [u,v] = E[j];
+        if (u == i || v == i) {
+          std::cerr << "found edge: " << u << ", " << v << std::endl;
+          num_edges++;
+        }
+      }
+      std::cerr << "num edges containing i: " << num_edges << std::endl;
+      if (num_edges > 0) break;
+    }
+  }
 
   // for (auto & v : V) {
   //   std::cout << v << ", ";
@@ -1184,14 +1212,21 @@ sequence<parent> CC(const Graph& G, GazitParams params = GazitParams()) {
 
   auto parents = internal::easy_case_from(n, de.root_edges, std::move(de.parents));
 
-  // gbbs::parallel_for(0, n, [&](size_t i) {
-  //   internal::find_root(parents, static_cast<uintE>(i));
-  // });
+  gbbs::parallel_for(0, n, [&](size_t i) {
+    internal::find_root(parents, static_cast<uintE>(i));
+  });
 
   std::cerr << "made it to here!" << std::endl;
 
   gbbs::parallel_for(0, n, [&](size_t i) {
-    P[i] = internal::get_root(P[i], parents);
+    int v = internal::get_root(P[i], parents);
+    if (P[i] != v) {
+      // std::cerr << "v: " << i << "\n"
+      //   << "old p: " << P[i] << "\n"
+      //   << "new p: " << v << "\n";
+
+      P[i] = v;
+    }
   });
 
   return P;
