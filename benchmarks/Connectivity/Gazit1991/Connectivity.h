@@ -407,10 +407,10 @@ inline void deterministic_mate(
 
   gbbs::parallel_for(0, n_roots, [&](size_t i) {
     uintE v = V_roots[i];
-    
+
     if (in_deg[v] == 0) {
       P[v] = next[v];
-      mate_j[v] = j; 
+      mate_j[v] = j;
       mate_j[next[v]] = j;
 
       removed[next[v]] = 1; // remove parents of zero degree vertex
@@ -420,7 +420,7 @@ inline void deterministic_mate(
       removed[v] = 1; // remove in_deg 0, 2+
     }
   });
-  
+
   sequence<uint8_t> end_compression(n);
 
   gbbs::parallel_for(0, n_roots, [&](size_t i) {
@@ -455,7 +455,7 @@ inline void deterministic_mate(
   // for (int i = 0; i < log2(n_roots); i++) { // should be able to use loglog(n) rounds
   //   gbbs::parallel_for(0, n_roots, [&](size_t i) {
   //     if (removed[i] || removed[next[i]]) return;
-      
+
   //     if (end_compression[i] || end_compression[next[i]]) return; // if we already point to the head of a sublist or we are the head of a sublist, we're done
 
   //     next[i] = next[next[i]];
@@ -476,16 +476,16 @@ inline void deterministic_mate(
 
   // Can't do pointer jumping (not work efficient)
 
-  // NOTE: pointer jumping probably faster... 
+  // NOTE: pointer jumping probably faster...
 
   std::barrier sync_round(num_threads);
   std::barrier sync_chosen(num_threads);
 
   std::vector<int> round_taken(n, -1);
-  size_t chunk_size = (n_roots + num_threads - 1) / num_threads; 
+  size_t chunk_size = (n_roots + num_threads - 1) / num_threads;
 
   auto worker = [&](int tid) {
-    int lo = tid * chunk_size; 
+    int lo = tid * chunk_size;
     int hi = std::min(n_roots, lo+chunk_size);
 
     int cur_pos = lo;
@@ -514,9 +514,9 @@ inline void deterministic_mate(
       sync_chosen.arrive_and_wait();
 
       if (round_taken[next[v]] == round) { // SERIAL calculation and work backwards
-        int next_v = next[v]; 
+        int next_v = next[v];
         int prev_v = prev[v];
-        uint8_t is_tail = 0; 
+        uint8_t is_tail = 0;
 
         if (next[next_v] < 0 || round_taken[next[next_v]] != round) {
           is_tail = 1;
@@ -541,13 +541,13 @@ inline void deterministic_mate(
 
           sync_round.arrive_and_wait();
           round++;
-          
+
           uintE cur_v = v;
-          
+
           while (1) {
             cur_v = prev[cur_v];
 
-            int next_v = next[cur_v]; 
+            int next_v = next[cur_v];
             int prev_v = prev[cur_v];
 
             if (prev_v < 0 || round_taken[prev_v] != freeze_round) {
@@ -599,7 +599,6 @@ inline void deterministic_mate2(
   sequence<int>& mate_j, // the round in which v was mated (for later use by partitioning)
   int j // the j round in partitioning
 ) {
-  int num_threads = std::thread::hardware_concurrency();
   size_t n = P.size();
   size_t n_roots = V_roots.size();
 
@@ -622,10 +621,10 @@ inline void deterministic_mate2(
 
   gbbs::parallel_for(0, n_roots, [&](size_t i) {
     uintE v = V_roots[i];
-    
+
     if (in_deg[v] == 0) {
       P[v] = next[v];
-      mate_j[v] = j; 
+      mate_j[v] = j;
 
       removed[next[v]] = 1; // remove parents of zero degree vertex
     };
@@ -634,7 +633,7 @@ inline void deterministic_mate2(
       removed[v] = 1; // remove in_deg 0, 2+
     }
   });
-  
+
   sequence<uint8_t> end_compression(n);
 
   gbbs::parallel_for(0, n_roots, [&](size_t i) {
@@ -670,7 +669,7 @@ inline void deterministic_mate2(
     gbbs::parallel_for(0, n_roots, [&](size_t i) {
       uintE v = V_roots[i];
       if (removed[v] || removed[next[v]]) return;
-      
+
       if (end_compression[v] || end_compression[next[v]]) return; // if we already point to the head of a sublist or we are the head of a sublist, we're done
 
       next[v] = next[next[v]];
@@ -684,13 +683,14 @@ inline void deterministic_mate2(
 
     if (end_compression[v] != 1) { // if we are the head of a sub list, our parent pointer stays the same (root of star)
       P[v] = next[v];
+      mate_j[v] = j;
     }
   });
 
 }
 
 inline parent get_root(
-  uintE v, 
+  uintE v,
   sequence<parent>& P
 ) {
   while (P[v] != v) {
@@ -727,13 +727,27 @@ inline sequence<Edge> sample_edges(
 inline void reassign_edges(sequence<parent>& parents, sequence<Edge>& E) {
   const size_t m = E.size();
 
+  // std::cout << "TESTER TESTER1" << std::endl;
+  // for (auto & [u,v] : E) {
+  //   if (u == 0 || v == 0) {
+  //     std::cout << u << ", " << v << std::endl;
+  //     break;
+  //   }
+  // }
+
+  // std::cout << "TESTER P[0]: " << parents[0] << std::endl;
+
   gbbs::parallel_for(0, m, [&](size_t i) {
     const auto [u, v] = E[i];
+    if (parents[u] == static_cast<parent>(-1) || parents[v] == static_cast<parent>(-1))
+      return;
     uintE ru = get_root(u, parents);
     uintE rv = get_root(v, parents);
     E[i].first = ru;
     E[i].second = rv;
   });
+
+  // std::cout << "PAST IT" << std::endl;
 
   parlay::sort_inplace(E, [&](const Edge& a, const Edge& b) {
     if (a.first < b.first) return true;
@@ -750,8 +764,9 @@ struct PartitioningResult {
 };
 
 inline PartitioningResult gazit_partitioning(
-  sequence<uintE>& V, 
+  sequence<uintE>& V,
   sequence<Edge>& E,
+  sequence<Edge>& E_graph,
   int big_n
 ) {
   double alpha = 0.4;
@@ -774,12 +789,12 @@ inline PartitioningResult gazit_partitioning(
 
     gbbs::parallel_for(0, E_sample.size(), [&](size_t i) {
       auto [u,v] = E_sample[i];
-      
+
       uintE root_u = get_root(u, P);
       uintE root_v = get_root(v, P);
 
       if (root_u != root_v && flag[root_u] == j && flag[root_v] == j) { // live edge
-        next[root_u] = root_v; 
+        next[root_u] = root_v;
         next[root_v] = root_u;
         flag[root_u] = j + 1;
         flag[root_v] = j + 1;
@@ -791,7 +806,20 @@ inline PartitioningResult gazit_partitioning(
     deterministic_mate2(V_roots, P, next, mate_j, j);
   }
 
-  for (int j = rounds - 1; j >= 0; j--) {
+  // int v_test = 0;
+
+  // while (P[v_test] != -1 && v_test != P[v_test]) {
+  //   std::cout << "partioning p of " << v_test << "= " << P[v_test] << std::endl;
+  //   std::cout << "mate j of " << v_test << "= " << mate_j[v_test] << std::endl;
+  //   v_test = P[v_test];
+  // }
+  // std::cout << "paritioning p[0]: " << P[0] << std::endl;
+  // std::cout << "paritioning p[23977]: " << P[23977] << std::endl;
+  // std::cout << "paritioning p[23129]: " << P[23129] << std::endl;
+  // std::cout << "paritioning p[13573]: " << P[13573] << std::endl;
+  // std::cout << "paritioning p[8973]: " << P[8973] << std::endl;
+
+  for (int j = rounds; j >= 0; j--) {
     gbbs::parallel_for(0, n, [&](size_t i) {
       uintE v = V[i];
       if (mate_j[v] == j) {
@@ -800,10 +828,18 @@ inline PartitioningResult gazit_partitioning(
     });
   }
 
+  // v_test = 0;
+
+  // while (P[v_test] != -1 && v_test != P[v_test]) {
+  //   std::cout << "partioning2 p of " << v_test << "= " << P[v_test] << std::endl;
+  //   v_test = P[v_test];
+  // }
+
+  reassign_edges(P, E_graph);
   reassign_edges(P, E);
 
   sequence<int> extrovert_flag = parlay::map(flag, [&](int x){ return x == rounds + 1 ? 1 : 0;});
-  
+
   return PartitioningResult{
     std::move(extrovert_flag),
   };
@@ -811,7 +847,7 @@ inline PartitioningResult gazit_partitioning(
 
 template<class Graph>
 std::pair<sequence<uintE>, sequence<Edge>> sparse_to_dense(Graph & G, sequence<parent>& P) {
-  // int m = G.m; 
+  // int m = G.m;
   int n = G.n;
 
   int rounds = ceil(2*log2(log2(n)));
@@ -829,18 +865,47 @@ std::pair<sequence<uintE>, sequence<Edge>> sparse_to_dense(Graph & G, sequence<p
   auto V_i = V;
   auto E_i = E;
   // sequence<Edge> E_cum;
-  
-  
+
+  // for (auto & [u,v] : E) {
+  //   if (u == 0 || v == 0) {
+  //     std::cout << u << ", " << v << std::endl;
+  //     break;
+  //   }
+  // }
+
+  // for (auto & [u,v] : E_i) {
+  //   if (u == 0 || v == 0) {
+  //     std::cout << u << ", " << v << std::endl;
+  //     break;
+  //   }
+  // }
+
+
   sequence<int> extrovert_flag;
-  
+
   for (int i = 0; i <= rounds; i++) { // change to rounds
-    PartitioningResult partition_result = gazit_partitioning(V_i, E_i, n);
+  //   for (auto & [u,v] : E_i) {
+  //     if (u == 0 || v == 0) {
+  //       std::cout << u << ", " << v << std::endl;
+  //       break;
+  //     }
+  //   }
+    // std::cout << "V[0] r" << i << ": " << V_i[0] << std::endl;
+    // std::cout << "extro[0] r" << i << ": " << extrovert_set[0] << std::endl;
+    // std::cout << "extro[23977] r" << i << ": " << extrovert_set[23977] << std::endl;
+    PartitioningResult partition_result = gazit_partitioning(V_i, E_i, E, n);
+    // for (auto & [u,v] : E_i) {
+    //   if (u == 0 || v == 0) {
+    //     std::cout << u << ", " << v << std::endl;
+    //     break;
+    //   }
+    // }
     extrovert_flag = std::move(partition_result.extrovert_flag);
-    
+
     if (i <= rounds -1) {
       gbbs::parallel_for(0, V_i.size(), [&](size_t i) {
         uintE v = V_i[i];
-        if (extrovert_flag[v]) // Note: Fine not to do this here since we add the entire V_i to the output V
+        if (extrovert_flag[v])
           extrovert_set[v] = 1;
       });
 
@@ -867,16 +932,21 @@ std::pair<sequence<uintE>, sequence<Edge>> sparse_to_dense(Graph & G, sequence<p
   //   return ! extrovert_set[i];
   // }));
 
-  gbbs::parallel_for(0, E.size(), [&](size_t i){
-    auto [u, v] = E[i];
-    if (extrovert_set[u] && !extrovert_set[v]) {
-      P[v] = u;
-    } else if (extrovert_set[v] && !extrovert_set[u]) {
-      P[u] = v;
-    }
-  });
+  // gbbs::parallel_for(0, E.size(), [&](size_t i){
+  //   auto [u, v] = E[i];
+  //   if (extrovert_set[u] && !extrovert_set[v]) {
+  //     P[v] = u;
+  //   } else if (extrovert_set[v] && !extrovert_set[u]) {
+  //     P[u] = v;
+  //   }
+  // });
 
-  reassign_edges(P, E);
+  // std::cout << "P[0] final: " << P[0] << std::endl; // --
+
+  // std::cout << "extro[0]" << extrovert_set[0] << std::endl;
+
+
+  // reassign_edges(P, E);
 
   gbbs::parallel_for(0, V_i.size(), [&](size_t i) {
     uintE v = V_i[i];
@@ -884,11 +954,12 @@ std::pair<sequence<uintE>, sequence<Edge>> sparse_to_dense(Graph & G, sequence<p
     extrovert_set[v] = 1;
   });
 
+
   V = parlay::pack(V, extrovert_set);
 
   return std::pair{V, E};
 
-      // Deterministic hooking below 
+      // Deterministic hooking below
     // gbbs::parallel_for(0, extrovert_flag.size(), [&](size_t i) {
     //   if (extrovert_flag[i]) return;
 
@@ -1018,7 +1089,7 @@ Merge extroverts into supervertices via deterministic mating.
 
 Replace edges to connect only supervertex roots.
 
-Repeat until graph size ≤ 
+Repeat until graph size ≤
 𝑛
 /
 log
@@ -1031,6 +1102,13 @@ Proceed with dense-to-easy reduction and then the easy-case algorithm.
 
 }
 
+// void map_edges(
+//   sequence<int>& map,
+//   sequence<parent>& P
+// ) {
+//   gbbs::parallel_for()
+// }
+
 
 template <class Graph>
 sequence<parent> CC(const Graph& G, GazitParams params = GazitParams()) {
@@ -1042,14 +1120,58 @@ sequence<parent> CC(const Graph& G, GazitParams params = GazitParams()) {
   //   return internal::Edge{u, v};
   // });
 
+  std::cerr << "[gazit] edges before sparse_to_dense: "
+            << G.m << std::endl;
+
+  std::cerr << "[gazit] vertices before sparse_to_dense: "
+            << G.n << std::endl;
+
   sequence<parent> P(n);
   gbbs::parallel_for(0, n, [&](size_t i) { P[i] = static_cast<parent>(i);});
 
-  auto [_, edges] = internal::sparse_to_dense(G, P);
+  auto [V, E] = internal::sparse_to_dense(G, P);
 
-  std::cout << "[gazit] edges before dense_to_easy: "
-            << edges.size() << std::endl;
-  auto de = internal::dense_to_easy(n, edges, params, P);
+  for (int i = 0; i < 100; i++) {
+    std::cerr << "i: " << i << " P[i]: " << P[i] << std::endl;
+  }
+
+  sequence<int> map(n, -1);
+  int n2 = V.size();
+  int m2 = E.size();
+
+  gbbs::parallel_for(0, n2, [&](size_t i) {
+    map[V[i]] = i;
+  });
+
+  // for (auto & v : V) {
+  //   std::cout << v << ", ";
+  // }
+
+  // std::cout << "num edges"
+
+  // for (auto & e : E) {
+  //   if (map[e.first] == -1 || map[e.second] == -1) {
+  //     std::cout << e.first << ", " << e.second << std::endl;
+  //     return P;
+  //   }
+  // }
+
+  // for (auto & [u,v] : E) {
+  //   if (internal::get_root(u, P) != u || internal::get_root(v, P) != v) {
+  //     std::cerr << u << ", " << v << std::endl;
+  //     return P;
+  //   }
+  // }
+
+  std::cerr << "[gazit] edges before dense_to_easy: "
+            << m2 << std::endl;
+  std::cerr << "[gazit] vertices before dense_to_easy: "
+            << n2 << std::endl;
+
+  sequence<parent> P2(n);
+  gbbs::parallel_for(0, n, [&](size_t i) { P2[i] = static_cast<parent>(i);});
+
+  auto de = internal::dense_to_easy(n, E, params, P2);
   std::cout << "[gazit] edges after dense_to_easy: "
             << de.root_edges.size() << std::endl;
 
@@ -1062,11 +1184,17 @@ sequence<parent> CC(const Graph& G, GazitParams params = GazitParams()) {
 
   auto parents = internal::easy_case_from(n, de.root_edges, std::move(de.parents));
 
+  // gbbs::parallel_for(0, n, [&](size_t i) {
+  //   internal::find_root(parents, static_cast<uintE>(i));
+  // });
+
+  std::cerr << "made it to here!" << std::endl;
+
   gbbs::parallel_for(0, n, [&](size_t i) {
-    internal::find_root(parents, static_cast<uintE>(i));
+    P[i] = internal::get_root(P[i], parents);
   });
 
-  return parents;
+  return P;
 }
 
 template <class Graph>
