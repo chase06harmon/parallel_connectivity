@@ -17,9 +17,9 @@ int BuildRegularRandom(int argc, char* argv[]) {
   size_t n = P.getOptionLongValue("-n", 1UL << 27);
   size_t m = P.getOptionLongValue("-m", 500000000);
 
-  double a = P.getOptionDoubleValue("-a", 0.25);
-  double b = P.getOptionDoubleValue("-b", 0.25);
-  double c = P.getOptionDoubleValue("-c", 0.25);
+  double a = P.getOptionDoubleValue("-a", 0.57);
+  double b = P.getOptionDoubleValue("-b", 0.19);
+  double c = P.getOptionDoubleValue("-c", 0.19);
 
   auto out_f = P.getOptionValue("-outfile", "");
 
