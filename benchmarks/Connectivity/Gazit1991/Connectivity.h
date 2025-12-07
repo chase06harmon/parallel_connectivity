@@ -393,11 +393,6 @@ inline void deterministic_mate(
   sequence<uint8_t> removed(n, 0);
   sequence<uintE> in_deg(n, 0);
 
-  sequence<uintE> prev(n);
-  gbbs::parallel_for(0, n, [&](size_t i) {
-    prev[next[i]] = i;
-  });
-
   // compute the in-degree from the next array
   gbbs::parallel_for(0, n_roots, [&](size_t i) {
     uintE v = V_roots[i];
@@ -422,6 +417,12 @@ inline void deterministic_mate(
   });
 
   sequence<uint8_t> end_compression(n);
+
+  sequence<uintE> prev(n);
+  gbbs::parallel_for(0, n, [&](size_t i) { // think about this more
+    if (!(removed[next[i]]))
+      prev[next[i]] = i;
+  });
 
   gbbs::parallel_for(0, n_roots, [&](size_t i) {
     uintE v = V_roots[i];
@@ -1173,6 +1174,27 @@ sequence<parent> CC(const Graph& G, GazitParams params = GazitParams()) {
     v_map[V[i]] = i;
   });
 
+  std::unordered_set<int> v_bad;
+
+  for (int i = 0; i < E.size(); i++) {
+    auto [u,v] = E[i];
+    if (v_map[u] == -1) {
+      std::cout << u << ", " << v << std::endl;
+      v_bad.insert(u);
+    }
+    if (v_map[v] == -1) {
+      std::cout << u << ", " << v << std::endl;
+      v_bad.insert(v);
+    }
+
+    // if (v_map[u] == -1 || v_map[v] == -1) {
+    //   E[i].first = 0;
+    //   E[i].second = 0;
+    // }
+  }
+
+  std::cerr << "bad v: " << v_bad.size() << std::endl;
+
   gbbs::parallel_for(0, m2, [&](size_t i){
     auto [u,v] = E[i];
     E[i].first = v_map[u];
@@ -1180,26 +1202,6 @@ sequence<parent> CC(const Graph& G, GazitParams params = GazitParams()) {
   });
 
   // gbbs::parallel_for(0, m2, [&](size_t i))
-
-
-  // std::unordered_set<int> v_bad;
-
-  // for (int i = 0; i < E.size(); i++) {
-  //   auto [u,v] = E[i];
-  //   if (v_map[u] == -1) {
-  //     std::cout << u << ", " << v << std::endl;
-  //     v_bad.insert(u);
-  //   }
-  //   if (v_map[v] == -1) {
-  //     std::cout << u << ", " << v << std::endl;
-  //     v_bad.insert(v);
-  //   }
-
-  //   // if (v_map[u] == -1 || v_map[v] == -1) {
-  //   //   E[i].first = 0;
-  //   //   E[i].second = 0;
-  //   // }
-  // }
 
   // // E = parlay::filter(E, [&](auto e) {return e.first != e.second;});
 
