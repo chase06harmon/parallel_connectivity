@@ -664,17 +664,29 @@ inline void deterministic_mate2(
     end_compression[v] = is_tail;
   });
 
-  // how to deal with cycles? Can use serial!
-  for (int i = 0; i < log2(n_roots); i++) { // should be able to use loglog(n) rounds
+  sequence<int> next_cur = next;
+  sequence<int> next_new(n);
+
+  for (int r = 0; r < (int)std::ceil(std::log2((double)n_roots)); r++) {
     gbbs::parallel_for(0, n_roots, [&](size_t i) {
       uintE v = V_roots[i];
-      if (removed[v] || removed[next[v]]) return;
+      if (removed[v] || removed[next_cur[v]]) {
+        next_new[v] = next_cur[v];
+        return;
+      }
 
-      if (end_compression[v] || end_compression[next[v]]) return; // if we already point to the head of a sublist or we are the head of a sublist, we're done
+      if (end_compression[v] || end_compression[next_cur[v]]) {
+        next_new[v] = next_cur[v];
+        return;
+      }
 
-      next[v] = next[next[v]];
+      next_new[v] = next_cur[next_cur[v]];  // both reads are from old buffer
     });
+
+    std::swap(next_cur, next_new);
   }
+
+  next = std::move(next_cur);
 
   gbbs::parallel_for(0, n_roots, [&](size_t i) {
     uintE v = V_roots[i];
@@ -1161,63 +1173,71 @@ sequence<parent> CC(const Graph& G, GazitParams params = GazitParams()) {
     v_map[V[i]] = i;
   });
 
-
-  std::unordered_set<int> v_bad;
-
-  for (int i = 0; i < E.size(); i++) {
+  gbbs::parallel_for(0, m2, [&](size_t i){
     auto [u,v] = E[i];
-    if (v_map[u] == -1) {
-      std::cout << u << ", " << v << std::endl;
-      v_bad.insert(u);
-    }
-    if (v_map[v] == -1) {
-      std::cout << u << ", " << v << std::endl;
-      v_bad.insert(v);
-    }
+    E[i].first = v_map[u];
+    E[i].second = v_map[v];
+  });
 
-    // if (v_map[u] == -1 || v_map[v] == -1) {
-    //   E[i].first = 0;
-    //   E[i].second = 0;
-    // }
-  }
+  // gbbs::parallel_for(0, m2, [&](size_t i))
 
-  // E = parlay::filter(E, [&](auto e) {return e.first != e.second;});
 
-  std::cerr << "bad v: " << v_bad.size() << std::endl;
+  // std::unordered_set<int> v_bad;
 
-  for (auto & v : v_bad) {
-    std::cerr << "v: " << v << std::endl;
-  }
+  // for (int i = 0; i < E.size(); i++) {
+  //   auto [u,v] = E[i];
+  //   if (v_map[u] == -1) {
+  //     std::cout << u << ", " << v << std::endl;
+  //     v_bad.insert(u);
+  //   }
+  //   if (v_map[v] == -1) {
+  //     std::cout << u << ", " << v << std::endl;
+  //     v_bad.insert(v);
+  //   }
+
+  //   // if (v_map[u] == -1 || v_map[v] == -1) {
+  //   //   E[i].first = 0;
+  //   //   E[i].second = 0;
+  //   // }
+  // }
+
+  // // E = parlay::filter(E, [&](auto e) {return e.first != e.second;});
+
+  // std::cerr << "bad v: " << v_bad.size() << std::endl;
+
+  // for (auto & v : v_bad) {
+  //   std::cerr << "v: " << v << std::endl;
+  // }
 
   std::cerr << "[gazit] edges before dense_to_easy: "
             << m2 << std::endl;
   std::cerr << "[gazit] vertices before dense_to_easy: "
             << n2 << std::endl;
 
-  sequence<parent> P2(n);
-  gbbs::parallel_for(0, n, [&](size_t i) { P2[i] = static_cast<parent>(i);});
+  sequence<parent> P2(n2);
+  gbbs::parallel_for(0, n2, [&](size_t i) { P2[i] = static_cast<parent>(i);});
 
-  auto de = internal::dense_to_easy(n, E, params, P2);
+  auto de = internal::dense_to_easy(n2, E, params, P2);
   std::cout << "[gazit] edges after dense_to_easy: "
             << de.root_edges.size() << std::endl;
 
   if (de.root_edges.size() == 0) {
-    gbbs::parallel_for(0, n, [&](size_t i) {
+    gbbs::parallel_for(0, n2, [&](size_t i) {
       internal::find_root(de.parents, static_cast<uintE>(i));
     });
     return de.parents;
   }
 
-  auto parents = internal::easy_case_from(n, de.root_edges, std::move(de.parents));
+  auto parents = internal::easy_case_from(n2, de.root_edges, std::move(de.parents));
 
-  gbbs::parallel_for(0, n, [&](size_t i) {
+  gbbs::parallel_for(0, n2, [&](size_t i) {
     internal::find_root(parents, static_cast<uintE>(i));
   });
 
   std::cerr << "made it to here!" << std::endl;
 
   gbbs::parallel_for(0, n, [&](size_t i) {
-    P[i] = internal::get_root(P[i], parents);
+    P[i] = internal::get_root(v_map[P[i]], parents);
   });
 
   return P;
