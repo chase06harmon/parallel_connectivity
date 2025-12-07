@@ -201,9 +201,7 @@ def run_all_benchmarks(
 
 
 if __name__ == "__main__":
-    binaries_to_run = filter_binaries(
-        valid_binaries=UNWEIGHTED_GRAPH_BENCHMARKS,
-    )
+    binaries_to_run = filter_binaries(BENCHMARKS)
 
     parser = argparse.ArgumentParser(
         description=(
