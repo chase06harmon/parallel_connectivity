@@ -31,6 +31,16 @@ cc_binary(
     ],
 )
 
+cc_binary(
+    name = "line",
+    srcs = ["line.cc"],
+    deps = [
+        "line_library",
+        "//gbbs",
+    ],
+)
+
+
 cc_library(
     name = "BarabasiAlbert_library",
     hdrs = ["barabasi_albert.h"],
@@ -61,6 +71,15 @@ cc_binary(
 cc_library(
     name = "RegularRandom_library",
     hdrs = ["regular_random.h"],
+    deps = [
+        "//gbbs",
+        "//gbbs:macros",
+    ],
+)
+
+cc_library(
+    name = "line_library",
+    hdrs = ["line.h"],
     deps = [
         "//gbbs",
         "//gbbs:macros",
