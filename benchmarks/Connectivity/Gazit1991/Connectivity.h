@@ -390,7 +390,11 @@ inline void deterministic_mate(
   size_t n = P.size();
   size_t n_roots = V_roots.size();
 
-  sequence<uint8_t> removed(n, 0);
+  sequence<std::atomic<uint8_t>> removed(n);
+  gbbs::parallel_for(0, n, [&](size_t i) {
+    removed[i].store(0, std::memory_order_relaxed);
+  });
+
   sequence<uintE> in_deg(n, 0);
 
   // compute the in-degree from the next array
@@ -402,26 +406,30 @@ inline void deterministic_mate(
 
   gbbs::parallel_for(0, n_roots, [&](size_t i) {
     uintE v = V_roots[i];
-
     if (in_deg[v] == 0) {
       P[v] = next[v];
       mate_j[v] = j;
-      mate_j[next[v]] = j;
-
-      removed[next[v]] = 1; // remove parents of zero degree vertex
-    };
-
+      removed[next[v]].store(1, std::memory_order_relaxed);
+    }
     if (in_deg[v] == 0 || in_deg[v] >= 2) {
-      removed[v] = 1; // remove in_deg 0, 2+
+      removed[v].store(1, std::memory_order_relaxed);
     }
   });
 
   sequence<uint8_t> end_compression(n);
 
   sequence<uintE> prev(n);
-  gbbs::parallel_for(0, n, [&](size_t i) { // think about this more
-    if (!(removed[next[i]]))
-      prev[next[i]] = i;
+  gbbs::parallel_for(0, n, [&](size_t i) {
+    prev[i] = static_cast<uintE>(-1);
+  });
+
+  gbbs::parallel_for(0, n_roots, [&](size_t i) {
+    uintE v = V_roots[i];
+    uintE nv = next[v];
+    if (!removed[nv].load(std::memory_order_relaxed)) {
+      // just need *some* predecessor; CAS-or-write_min style is OK
+      gbbs::write_min<uintE>(&prev[nv], v);
+    }
   });
 
   gbbs::parallel_for(0, n_roots, [&](size_t i) {
@@ -606,13 +614,6 @@ inline void deterministic_mate2(
   sequence<uint8_t> removed(n, 0);
   sequence<uintE> in_deg(n, 0);
 
-  sequence<uintE> prev(n, -1);
-
-  gbbs::parallel_for(0, n_roots, [&](size_t i) {
-    int v = V_roots[i];
-    prev[next[v]] = v;
-  });
-
   // compute the in-degree from the next array
   gbbs::parallel_for(0, n_roots, [&](size_t i) {
     uintE v = V_roots[i];
@@ -636,6 +637,14 @@ inline void deterministic_mate2(
   });
 
   sequence<uint8_t> end_compression(n);
+  
+  sequence<uintE> prev(n, -1);
+
+  gbbs::parallel_for(0, n_roots, [&](size_t i) {
+    int v = V_roots[i];
+    if (! removed[next[v]])
+      prev[next[v]] = v;
+  });
 
   gbbs::parallel_for(0, n_roots, [&](size_t i) {
     uintE v = V_roots[i];
@@ -724,7 +733,7 @@ inline sequence<Edge> sample_edges(
 
   parlay::random_generator gen(42);
 
-  sequence<bool> keep(m);
+  sequence<uint8_t> keep(m);
 
   gbbs::parallel_for(0, m, [&](size_t i) {
     auto r = gen[i];
@@ -791,7 +800,8 @@ inline PartitioningResult gazit_partitioning(
   // Alternative: Remap vertices and edges in wrapper
   sequence<parent> P(big_n, -1);
   sequence<int> mate_j(big_n,-1);
-  sequence<int> flag(big_n, 0);
+  sequence<std::atomic<int>> flag(big_n);
+  gbbs::parallel_for(0, big_n, [&](size_t i) { flag[i].store(0, std::memory_order_relaxed); });
 
   gbbs::parallel_for(0, n, [&](size_t i) {P[V[i]] = V[i];});
 
@@ -799,23 +809,43 @@ inline PartitioningResult gazit_partitioning(
     size_t target_size = static_cast<size_t>(E.size() * pow(alpha, j));
 
     sequence<Edge> E_sample = internal::sample_edges(E, target_size);
-    sequence<int> next(big_n, -1);
+
+    // 1) Build next using atomics so multi-writer stores are defined.
+    sequence<std::atomic<int>> next_atomic(big_n);
+    gbbs::parallel_for(0, big_n, [&](size_t i) {
+      next_atomic[i].store(-1, std::memory_order_relaxed);
+    });
 
     gbbs::parallel_for(0, E_sample.size(), [&](size_t i) {
-      auto [u,v] = E_sample[i];
-
+      auto [u, v] = E_sample[i];
       uintE root_u = get_root(u, P);
       uintE root_v = get_root(v, P);
 
-      if (root_u != root_v && flag[root_u] == j && flag[root_v] == j) { // live edge
-        next[root_u] = root_v;
-        next[root_v] = root_u;
-        flag[root_u] = j + 1;
-        flag[root_v] = j + 1;
+      int expected_u = j;
+      int expected_v = j;
+      
+      if (root_u != root_v &&
+        flag[root_u].load(std::memory_order_relaxed) == expected_u &&
+        flag[root_v].load(std::memory_order_relaxed) == expected_v) {
+
+        next_atomic[root_u].store(static_cast<int>(root_v),
+                                  std::memory_order_relaxed);
+        next_atomic[root_v].store(static_cast<int>(root_u),
+                                  std::memory_order_relaxed);
+
+        flag[root_u].store(j + 1, std::memory_order_relaxed);
+        flag[root_v].store(j + 1, std::memory_order_relaxed);
       }
     });
 
-    sequence<uintE> V_roots = parlay::filter(V, [&](uintE v) {return flag[v] == j+1;});
+    // 2) Copy down into a normal sequence<int> for the rest of the algorithm.
+    sequence<int> next(big_n, -1);
+    gbbs::parallel_for(0, big_n, [&](size_t i) {
+      next[i] = next_atomic[i].load(std::memory_order_relaxed);
+    });
+
+    sequence<uintE> V_roots = parlay::filter(
+      V, [&](uintE v) { return flag[v].load(std::memory_order_relaxed) == j + 1; });
 
     deterministic_mate2(V_roots, P, next, mate_j, j);
   }
@@ -938,8 +968,8 @@ std::pair<sequence<uintE>, sequence<Edge>> sparse_to_dense(Graph & G, sequence<p
     });
 
     if (i <= rounds -1) {
-      sequence<bool> introvert_not_isolated(n, 0);
-      sequence<bool> include_in_E_i(E_i.size(), 0);
+      sequence<uint8_t> introvert_not_isolated(n, 0);
+      sequence<uint8_t> include_in_E_i(E_i.size(), 0);
 
       gbbs::parallel_for(0, E_i.size(), [&](size_t i){
         auto [u,v] = E_i[i];
@@ -964,16 +994,20 @@ std::pair<sequence<uintE>, sequence<Edge>> sparse_to_dense(Graph & G, sequence<p
   gbbs::parallel_for(0, E.size(), [&](size_t i){
     auto [u, v] = E[i];
     if (P[v] == v && extrovert_set[u] && !extrovert_set[v]) {
-      P[v] = u;
+      gbbs::CAS<parent>(&P[v], static_cast<parent>(v), static_cast<parent>(u));
     } else if (P[u] == u && extrovert_set[v] && !extrovert_set[u]) {
-      P[u] = v;
+      gbbs::CAS<parent>(&P[u], static_cast<parent>(u), static_cast<parent>(v));
     }
   });
 
+  sequence<parent> roots(n);
   gbbs::parallel_for(0, n, [&](size_t i){
-    P[i] = get_root(i, P);
+    roots[i] = get_root(i, P);   // read-only over P
+  });
 
-    if (!extrovert_set[i] && P[i] == i) { // could be introvert roots that are isolated since they mated at a lower round. excluded from introvert AND extrovert! 
+  gbbs::parallel_for(0, n, [&](size_t i){
+    P[i] = roots[i];
+    if (!extrovert_set[i] && P[i] == i) {
       extrovert_set[i] = 1;
     }
   });
@@ -1174,26 +1208,42 @@ sequence<parent> CC(const Graph& G, GazitParams params = GazitParams()) {
     v_map[V[i]] = i;
   });
 
-  std::unordered_set<int> v_bad;
-
-  for (int i = 0; i < E.size(); i++) {
-    auto [u,v] = E[i];
-    if (v_map[u] == -1) {
-      std::cout << u << ", " << v << std::endl;
-      v_bad.insert(u);
-    }
-    if (v_map[v] == -1) {
-      std::cout << u << ", " << v << std::endl;
-      v_bad.insert(v);
+  for (uintE v = 0; v < n; v++) {
+    if (P[v] != v)
+      continue;
+    bool found = false;
+    for (auto & [u1,v1] : E) {
+      if (v == u1 || v == v1) {
+        found = true;
+        break;
+      }
     }
 
-    // if (v_map[u] == -1 || v_map[v] == -1) {
-    //   E[i].first = 0;
-    //   E[i].second = 0;
-    // }
+    if (found == false) {
+      std::cerr << "vertex with no edges: " << v << std::endl;
+    }
   }
 
-  std::cerr << "bad v: " << v_bad.size() << std::endl;
+  // std::unordered_set<int> v_bad;
+
+  // for (int i = 0; i < E.size(); i++) {
+  //   auto [u,v] = E[i];
+  //   if (v_map[u] == -1) {
+  //     std::cout << u << ", " << v << std::endl;
+  //     v_bad.insert(u);
+  //   }
+  //   if (v_map[v] == -1) {
+  //     std::cout << u << ", " << v << std::endl;
+  //     v_bad.insert(v);
+  //   }
+
+  //   // if (v_map[u] == -1 || v_map[v] == -1) {
+  //   //   E[i].first = 0;
+  //   //   E[i].second = 0;
+  //   // }
+  // }
+
+  // std::cerr << "bad v: " << v_bad.size() << std::endl;
 
   gbbs::parallel_for(0, m2, [&](size_t i){
     auto [u,v] = E[i];
@@ -1203,7 +1253,7 @@ sequence<parent> CC(const Graph& G, GazitParams params = GazitParams()) {
 
   // gbbs::parallel_for(0, m2, [&](size_t i))
 
-  // // E = parlay::filter(E, [&](auto e) {return e.first != e.second;});
+  E = parlay::filter(E, [&](auto e) {return e.first != e.second;});
 
   // std::cerr << "bad v: " << v_bad.size() << std::endl;
 
@@ -1232,14 +1282,16 @@ sequence<parent> CC(const Graph& G, GazitParams params = GazitParams()) {
 
   auto parents = internal::easy_case_from(n2, de.root_edges, std::move(de.parents));
 
+  sequence<parent> P3(n2, 0);
+
   gbbs::parallel_for(0, n2, [&](size_t i) {
-    internal::find_root(parents, static_cast<uintE>(i));
+    P3[i] = internal::get_root(static_cast<uintE>(i), parents);
   });
 
   std::cerr << "made it to here!" << std::endl;
 
   gbbs::parallel_for(0, n, [&](size_t i) {
-    P[i] = internal::get_root(v_map[P[i]], parents);
+    P[i] = internal::get_root(v_map[P[i]], P3);
   });
 
   return P;
