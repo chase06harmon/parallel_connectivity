@@ -12,6 +12,7 @@ double GazitRunner(Graph& G, commandLine P) {
   params.max_rounds =
       static_cast<size_t>(P.getOptionLongValue("-max_rounds", 0));
   params.seed = static_cast<uint64_t>(P.getOptionLongValue("-seed", 5489));
+  params.skip_sparse_to_dense = P.getOption("-skip_sparse_to_dense");
   
   double elapsed;
   
@@ -24,7 +25,9 @@ double GazitRunner(Graph& G, commandLine P) {
     std::cout << "### Params: -alpha = " << params.alpha
               << " -processor_budget = " << params.processor_budget
               << " -max_rounds = " << params.max_rounds
-              << " -seed = " << params.seed << std::endl;
+              << " -seed = " << params.seed
+              << " -skip_sparse_to_dense = " << params.skip_sparse_to_dense
+              << std::endl;
     std::cout << "### ------------------------------------" << std::endl;
 
     timer t;
