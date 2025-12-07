@@ -7,7 +7,24 @@ PERF_MODE="${PERF_MODE:-none}"
 DATASET="${1:-livejournal}"
 ROUNDS="${2:-1}"
 
-BAZEL_FLAGS=(--macos_minimum_os=11.0 --cxxopt=-UPARLAY_USE_STD_ALLOC)
+BAZEL_FLAGS=(
+  --macos_minimum_os=11.0
+  --cxxopt=-UPARLAY_USE_STD_ALLOC
+  --repo_env=CC=/usr/bin/clang
+  --repo_env=CXX=/usr/bin/clang++
+)
+
+# Add debug flags ONLY if perf recording is on
+if [[ "${PERF_MODE}" == "record" ]]; then
+  echo "[perf] Enabling debug build for perf record"
+  BAZEL_FLAGS+=(
+    --compilation_mode=dbg
+    --cxxopt=-fno-omit-frame-pointer
+    --copt=-fno-omit-frame-pointer
+    --strip=never
+  )
+fi
+
 
 WORKSPACE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SNAP_DIR="${WORKSPACE_DIR}/snap_inputs"

@@ -162,16 +162,6 @@ struct DenseToEasyResult {
   sequence<Edge> root_edges;
 };
 
-inline sequence<size_t> sample_indices(size_t m, size_t k, uint64_t seed) {
-  sequence<size_t> idx(k);
-  parlay::random rng(seed);
-  gbbs::parallel_for(0, k, [&](size_t i) {
-    auto local_rng = rng.fork(i);
-    idx[i] = local_rng.ith_rand(0) % m;
-  });
-  return idx;
-}
-
 inline void halve_once(sequence<parent>& P) {
   size_t n = P.size();
   gbbs::parallel_for(0, n, [&](size_t i) {
@@ -439,219 +429,219 @@ inline int serial_1(uintE a, uintE b) {
   return __builtin_ctzll(diff);
 }
 
-inline void deterministic_mate(
-  const sequence<uintE>& V_roots, // vertices currently under consideration (numbers)
-  sequence<parent>& P, // global parent array
-  sequence<int>& next, // global for vertices in v (all else -1)
-  sequence<int>& mate_j, // the round in which v was mated (for later use by partitioning)
-  int j // the j round in partitioning
-) {
-  int num_threads = std::thread::hardware_concurrency();
-  size_t n = P.size();
-  size_t n_roots = V_roots.size();
+// inline void deterministic_mate(
+//   const sequence<uintE>& V_roots, // vertices currently under consideration (numbers)
+//   sequence<parent>& P, // global parent array
+//   sequence<int>& next, // global for vertices in v (all else -1)
+//   sequence<int>& mate_j, // the round in which v was mated (for later use by partitioning)
+//   int j // the j round in partitioning
+// ) {
+//   int num_threads = std::thread::hardware_concurrency();
+//   size_t n = P.size();
+//   size_t n_roots = V_roots.size();
 
-  sequence<uint8_t> removed(n, 0);
-  sequence<uintE> in_deg(n, 0);
+//   sequence<uint8_t> removed(n, 0);
+//   sequence<uintE> in_deg(n, 0);
 
-  // compute the in-degree from the next array
-  gbbs::parallel_for(0, n_roots, [&](size_t i) {
-    uintE v = V_roots[i];
-    gbbs::fetch_and_add(&in_deg[next[v]], 1);
-  });
-
-
-  gbbs::parallel_for(0, n_roots, [&](size_t i) {
-    uintE v = V_roots[i];
-
-    if (in_deg[v] == 0) {
-      P[v] = next[v];
-      mate_j[v] = j;
-      mate_j[next[v]] = j;
-
-      removed[next[v]] = 1; // remove parents of zero degree vertex
-    };
-
-    if (in_deg[v] == 0 || in_deg[v] >= 2) {
-      removed[v] = 1; // remove in_deg 0, 2+
-    }
-  });
-
-  sequence<uint8_t> end_compression(n);
-
-  sequence<uintE> prev(n);
-  gbbs::parallel_for(0, n, [&](size_t i) { // think about this more
-    if (!(removed[next[i]]))
-      prev[next[i]] = i;
-  });
-
-  gbbs::parallel_for(0, n_roots, [&](size_t i) {
-    uintE v = V_roots[i];
-
-    int next_v = next[v];
-    int prev_v = prev[v];
-    uint8_t is_tail = 0;
-
-    if (removed[next_v]) { // if the next vertext has been removed, we should stop star compression here (cannot proceed) Note: next_v always defined
-      is_tail = 1;
-
-    } else if (prev_v < 0 || removed[prev_v]) {
-      is_tail = 0;
-
-    } else {
-      int my_val = serial_1(v, next_v);
-      int prev_val = serial_1(prev_v, v);
-      int next_val = next[next_v] > -1 ? serial_1(next_v, next[next_v]) : -1; // if next[next_v] is not defined we cannot compute serial and thus trivially passes
-
-      if (((my_val > prev_val) || (my_val == prev_val && (v & (1u << my_val)))) && ((my_val > next_val) || (my_val == next_val && (v & (1u << my_val))))) {
-        is_tail = 1;
-      } else {
-        is_tail = 0;
-      }
-    }
-
-    end_compression[v] = is_tail;
-  });
-
-  // how to deal with cycles? Can use serial!
-  // for (int i = 0; i < log2(n_roots); i++) { // should be able to use loglog(n) rounds
-  //   gbbs::parallel_for(0, n_roots, [&](size_t i) {
-  //     if (removed[i] || removed[next[i]]) return;
-
-  //     if (end_compression[i] || end_compression[next[i]]) return; // if we already point to the head of a sublist or we are the head of a sublist, we're done
-
-  //     next[i] = next[next[i]];
-  //   });
-  // }
-
-  // gbbs::parallel_for(0, n_roots, [&](size_t i) {
-  //   if (removed[i]) return;
-
-  //   if (end_compression[i] != 1) {
-  //     P[i] = next[i];
-  //   }
-  // });
+//   // compute the in-degree from the next array
+//   gbbs::parallel_for(0, n_roots, [&](size_t i) {
+//     uintE v = V_roots[i];
+//     gbbs::fetch_and_add(&in_deg[next[v]], 1);
+//   });
 
 
-  // NOTE: From here on out must use removed to make sure v hasn't been removed from the graph
+//   gbbs::parallel_for(0, n_roots, [&](size_t i) {
+//     uintE v = V_roots[i];
+
+//     if (in_deg[v] == 0) {
+//       P[v] = next[v];
+//       mate_j[v] = j;
+//       mate_j[next[v]] = j;
+
+//       removed[next[v]] = 1; // remove parents of zero degree vertex
+//     };
+
+//     if (in_deg[v] == 0 || in_deg[v] >= 2) {
+//       removed[v] = 1; // remove in_deg 0, 2+
+//     }
+//   });
+
+//   sequence<uint8_t> end_compression(n);
+
+//   sequence<uintE> prev(n);
+//   gbbs::parallel_for(0, n, [&](size_t i) { // think about this more
+//     if (!(removed[next[i]]))
+//       prev[next[i]] = i;
+//   });
+
+//   gbbs::parallel_for(0, n_roots, [&](size_t i) {
+//     uintE v = V_roots[i];
+
+//     int next_v = next[v];
+//     int prev_v = prev[v];
+//     uint8_t is_tail = 0;
+
+//     if (removed[next_v]) { // if the next vertext has been removed, we should stop star compression here (cannot proceed) Note: next_v always defined
+//       is_tail = 1;
+
+//     } else if (prev_v < 0 || removed[prev_v]) {
+//       is_tail = 0;
+
+//     } else {
+//       int my_val = serial_1(v, next_v);
+//       int prev_val = serial_1(prev_v, v);
+//       int next_val = next[next_v] > -1 ? serial_1(next_v, next[next_v]) : -1; // if next[next_v] is not defined we cannot compute serial and thus trivially passes
+
+//       if (((my_val > prev_val) || (my_val == prev_val && (v & (1u << my_val)))) && ((my_val > next_val) || (my_val == next_val && (v & (1u << my_val))))) {
+//         is_tail = 1;
+//       } else {
+//         is_tail = 0;
+//       }
+//     }
+
+//     end_compression[v] = is_tail;
+//   });
+
+//   // how to deal with cycles? Can use serial!
+//   // for (int i = 0; i < log2(n_roots); i++) { // should be able to use loglog(n) rounds
+//   //   gbbs::parallel_for(0, n_roots, [&](size_t i) {
+//   //     if (removed[i] || removed[next[i]]) return;
+
+//   //     if (end_compression[i] || end_compression[next[i]]) return; // if we already point to the head of a sublist or we are the head of a sublist, we're done
+
+//   //     next[i] = next[next[i]];
+//   //   });
+//   // }
+
+//   // gbbs::parallel_for(0, n_roots, [&](size_t i) {
+//   //   if (removed[i]) return;
+
+//   //   if (end_compression[i] != 1) {
+//   //     P[i] = next[i];
+//   //   }
+//   // });
 
 
-  // Can't do pointer jumping (not work efficient)
+//   // NOTE: From here on out must use removed to make sure v hasn't been removed from the graph
 
-  // NOTE: pointer jumping probably faster...
 
-  std::barrier sync_round(num_threads);
-  std::barrier sync_chosen(num_threads);
+//   // Can't do pointer jumping (not work efficient)
 
-  std::vector<int> round_taken(n, -1);
-  size_t chunk_size = (n_roots + num_threads - 1) / num_threads;
+//   // NOTE: pointer jumping probably faster...
 
-  auto worker = [&](int tid) {
-    int lo = tid * chunk_size;
-    int hi = std::min(n_roots, lo+chunk_size);
+//   std::barrier sync_round(num_threads);
+//   std::barrier sync_chosen(num_threads);
 
-    int cur_pos = lo;
-    int round = 0;
+//   std::vector<int> round_taken(n, -1);
+//   size_t chunk_size = (n_roots + num_threads - 1) / num_threads;
 
-    while (round < chunk_size + 2*log2(n)) {
-      if (cur_pos >= hi) { // no more vertices to process
-        sync_chosen.arrive_and_wait();
-        sync_round.arrive_and_wait();
-        round++;
-        continue;
-      }
+//   auto worker = [&](int tid) {
+//     int lo = tid * chunk_size;
+//     int hi = std::min(n_roots, lo+chunk_size);
 
-      if (removed[V_roots[cur_pos]]) { // if the vertex has been removed, we don't need to consider it
-        cur_pos++;
-        continue;
-      }
+//     int cur_pos = lo;
+//     int round = 0;
 
-      uintE v = V_roots[cur_pos];
-      round_taken[v] = round;
+//     while (round < chunk_size + 2*log2(n)) {
+//       if (cur_pos >= hi) { // no more vertices to process
+//         sync_chosen.arrive_and_wait();
+//         sync_round.arrive_and_wait();
+//         round++;
+//         continue;
+//       }
 
-      // if (tid == 1) {
-      //   std::cout << "v: " << v << std::endl;
-      // }
+//       if (removed[V_roots[cur_pos]]) { // if the vertex has been removed, we don't need to consider it
+//         cur_pos++;
+//         continue;
+//       }
 
-      sync_chosen.arrive_and_wait();
+//       uintE v = V_roots[cur_pos];
+//       round_taken[v] = round;
 
-      if (round_taken[next[v]] == round) { // SERIAL calculation and work backwards
-        int next_v = next[v];
-        int prev_v = prev[v];
-        uint8_t is_tail = 0;
+//       // if (tid == 1) {
+//       //   std::cout << "v: " << v << std::endl;
+//       // }
 
-        if (next[next_v] < 0 || round_taken[next[next_v]] != round) {
-          is_tail = 1;
+//       sync_chosen.arrive_and_wait();
 
-        } else if (prev_v < 0 || round_taken[prev_v] != round) {
-          is_tail = 1;
+//       if (round_taken[next[v]] == round) { // SERIAL calculation and work backwards
+//         int next_v = next[v];
+//         int prev_v = prev[v];
+//         uint8_t is_tail = 0;
 
-        } else {
-          int my_val = serial_1(v, next_v);
-          int prev_val = serial_1(prev_v, v);
-          int next_val = serial_1(next_v, next[next_v]);
+//         if (next[next_v] < 0 || round_taken[next[next_v]] != round) {
+//           is_tail = 1;
 
-          if (((my_val > prev_val) || (my_val == prev_val && (v & (1u << my_val)))) && ((my_val > next_val) || (my_val == next_val && (v & (1u << my_val))))) {
-            is_tail = 1;
-          } else {
-            is_tail = 0;
-          }
-        }
+//         } else if (prev_v < 0 || round_taken[prev_v] != round) {
+//           is_tail = 1;
 
-        if (is_tail) {
-          int freeze_round = round;
+//         } else {
+//           int my_val = serial_1(v, next_v);
+//           int prev_val = serial_1(prev_v, v);
+//           int next_val = serial_1(next_v, next[next_v]);
 
-          sync_round.arrive_and_wait();
-          round++;
+//           if (((my_val > prev_val) || (my_val == prev_val && (v & (1u << my_val)))) && ((my_val > next_val) || (my_val == next_val && (v & (1u << my_val))))) {
+//             is_tail = 1;
+//           } else {
+//             is_tail = 0;
+//           }
+//         }
 
-          uintE cur_v = v;
+//         if (is_tail) {
+//           int freeze_round = round;
 
-          while (1) {
-            cur_v = prev[cur_v];
+//           sync_round.arrive_and_wait();
+//           round++;
 
-            int next_v = next[cur_v];
-            int prev_v = prev[cur_v];
+//           uintE cur_v = v;
 
-            if (prev_v < 0 || round_taken[prev_v] != freeze_round) {
-              break;
-            }
+//           while (1) {
+//             cur_v = prev[cur_v];
 
-            int my_val = serial_1(cur_v, next_v);
-            int prev_val = serial_1(prev_v, cur_v);
-            int next_val = serial_1(next_v, next[next_v]);
+//             int next_v = next[cur_v];
+//             int prev_v = prev[cur_v];
 
-            if (((my_val > prev_val) || (my_val == prev_val && (cur_v & (1u << my_val)))) && ((my_val > next_val) || (my_val == next_val && (cur_v & (1u << my_val))))) {
-              break;
-            }
+//             if (prev_v < 0 || round_taken[prev_v] != freeze_round) {
+//               break;
+//             }
 
-            sync_chosen.arrive_and_wait();
+//             int my_val = serial_1(cur_v, next_v);
+//             int prev_val = serial_1(prev_v, cur_v);
+//             int next_val = serial_1(next_v, next[next_v]);
 
-            P[cur_v] = v;
-            sync_round.arrive_and_wait();
-            round++;
-          }
-        } else {
-          sync_round.arrive_and_wait();
-          round++;
-        }
+//             if (((my_val > prev_val) || (my_val == prev_val && (cur_v & (1u << my_val)))) && ((my_val > next_val) || (my_val == next_val && (cur_v & (1u << my_val))))) {
+//               break;
+//             }
 
-      } else {
-        P[v] = P[next[v]];
-        removed[next[v]] = 1;
-        cur_pos++;
-        sync_round.arrive_and_wait();
-        round++;
-      }
-    }
-  };
+//             sync_chosen.arrive_and_wait();
 
-  std::vector<std::thread> threads;
-  threads.reserve(num_threads);
-  for (int t = 0; t < num_threads; ++t) {
-      threads.emplace_back(worker, t);
-  }
-  for (auto& th : threads) th.join();
+//             P[cur_v] = v;
+//             sync_round.arrive_and_wait();
+//             round++;
+//           }
+//         } else {
+//           sync_round.arrive_and_wait();
+//           round++;
+//         }
 
-}
+//       } else {
+//         P[v] = P[next[v]];
+//         removed[next[v]] = 1;
+//         cur_pos++;
+//         sync_round.arrive_and_wait();
+//         round++;
+//       }
+//     }
+//   };
+
+//   std::vector<std::thread> threads;
+//   threads.reserve(num_threads);
+//   for (int t = 0; t < num_threads; ++t) {
+//       threads.emplace_back(worker, t);
+//   }
+//   for (auto& th : threads) th.join();
+
+// }
 
 inline void deterministic_mate2(
   const sequence<uintE>& V_roots, // vertices currently under consideration (numbers)
@@ -728,7 +718,7 @@ inline void deterministic_mate2(
   sequence<int> next_cur = next;
   sequence<int> next_new(n);
 
-  for (int r = 0; r < (int)std::ceil(std::log2((double)n_roots)); r++) {
+  for (int r = 0; r < (int)std::ceil(std::log2(std::log2((double)n_roots))); r++) {
     gbbs::parallel_for(0, n_roots, [&](size_t i) {
       uintE v = V_roots[i];
       if (removed[v] || removed[next_cur[v]]) {
@@ -773,26 +763,36 @@ inline parent get_root(
   return v;
 }
 
+inline sequence<size_t> sample_indices(size_t m, size_t k, uint64_t seed) {
+  sequence<size_t> idx(k);
+  parlay::random rng(seed);
+  gbbs::parallel_for(0, k, [&](size_t i) {
+    auto local_rng = rng.fork(i);
+    idx[i] = local_rng.ith_rand(0) % m;
+  });
+  return idx;
+}
+
+
 inline sequence<Edge> sample_edges(
   sequence<Edge>& E,
-  size_t target_size
+  size_t target_size,
+  uint64_t seed = 42
 ) {
+  size_t m = E.size();
+  if (target_size >= m) {
+    // Either return E by value or make a copy; choice depends on callsites.
+    return E;  // if you’re fine with aliasing
+  }
 
-  int m = E.size();
+  auto idx = sample_indices(m, target_size, seed);
+  sequence<Edge> out(target_size);
 
-  float p = static_cast<float>(target_size) / static_cast<float>(m);
-
-  parlay::random_generator gen(42);
-
-  sequence<bool> keep(m);
-
-  gbbs::parallel_for(0, m, [&](size_t i) {
-    auto r = gen[i];
-    std::bernoulli_distribution coin(p);
-    keep[i] = coin(r);
+  gbbs::parallel_for(0, target_size, [&](size_t i) {
+    out[i] = E[idx[i]];
   });
 
-  return parlay::pack(E, keep);
+  return out;
 }
 
 
@@ -822,11 +822,12 @@ inline void reassign_edges(sequence<parent>& parents, sequence<Edge>& E) {
 
   // std::cout << "PAST IT" << std::endl;
 
-  parlay::sort_inplace(E, [&](const Edge& a, const Edge& b) {
-    if (a.first < b.first) return true;
-    if (a.first > b.first) return false;
-    return a.second < b.second;
-  });
+  parlay::integer_sort_inplace(
+    E,
+    [&](const Edge& e) -> uint64_t {
+      return (uint64_t(e.first) << 32) | uint64_t(e.second);
+    }
+  );
 
   E = parlay::unique(E);
   E = parlay::filter(E, [&](Edge e) {return e.first != e.second;});
@@ -843,7 +844,7 @@ inline PartitioningResult gazit_partitioning(
   int big_n,
   sequence<parent>& global_p
 ) {
-  double alpha = 0.4;
+  double alpha = 0.5;
   int n = V.size();
   int rounds = ceil(log2(log2(big_n)));
 
@@ -858,7 +859,7 @@ inline PartitioningResult gazit_partitioning(
   for (int j = 0; j <= rounds; j++) {
     size_t target_size = static_cast<size_t>(E.size() * pow(alpha, j));
 
-    sequence<Edge> E_sample = internal::sample_edges(E, target_size);
+    sequence<Edge> E_sample = internal::sample_edges(E, target_size, 1337 + j);
     sequence<int> next(big_n, -1);
 
     gbbs::parallel_for(0, E_sample.size(), [&](size_t i) {
@@ -909,7 +910,7 @@ inline PartitioningResult gazit_partitioning(
   //   v_test = P[v_test];
   // }
 
-  reassign_edges(P, E_graph);
+  // reassign_edges(P, E_graph);
   reassign_edges(P, E);
 
   sequence<int> extrovert_flag = parlay::map(flag, [&](int x){ return x == rounds + 1 ? 1 : 0;});
