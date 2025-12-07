@@ -73,10 +73,37 @@ inline uint8_t extparent(const sequence<parent>& P,
 }
 
 inline void set_flag1(uint8_t* addr) {
-  gbbs::atomic_store<uint8_t>(addr, static_cast<uint8_t>(1));
+  gbbs::write_max<uint8_t>(addr, static_cast<uint8_t>(1));
 }
 inline uint8_t load_flag(uint8_t* addr) {
   return gbbs::atomic_load(addr);
+}
+inline uint8_t load_u8(const uint8_t* addr) {
+  return gbbs::atomic_load<uint8_t>(const_cast<uint8_t*>(addr));
+}
+inline void store_u8(uint8_t* addr, uint8_t v) {
+  gbbs::atomic_store<uint8_t>(addr, v);
+}
+
+// Mark with epoch, but avoid redundant stores once already marked this epoch.
+inline void mark_epoch(uint8_t* addr, uint8_t epoch) {
+  uint8_t cur = load_u8(addr);
+  if (cur != epoch) store_u8(addr, epoch);
+}
+inline bool is_marked_epoch(const uint8_t* addr, uint8_t epoch) {
+  return load_u8(addr) == epoch;
+}
+
+// Advance epoch; handle wrap by clearing the array with atomic_store(0).
+inline uint8_t advance_epoch(sequence<uint8_t>& changed, uint8_t epoch) {
+  epoch = static_cast<uint8_t>(epoch + 1);
+  if (epoch == 0) {  // wrapped
+    gbbs::parallel_for(0, changed.size(), [&](size_t i) {
+      store_u8(&changed[i], static_cast<uint8_t>(0));
+    });
+    epoch = 1;
+  }
+  return epoch;
 }
 inline sequence<parent> canonicalize_labels(const sequence<parent>& labels) {
   const size_t n = labels.size();
@@ -169,6 +196,26 @@ inline void halve_once(sequence<parent>& P) {
   });
 }
 
+inline void try_star_side_epoch(uintE other,
+                                parent r,  // root(from) (i.e., P[from] where from is child-of-root)
+                                sequence<parent>& P,
+                                sequence<uint8_t>& changed,
+                                uint8_t epoch) {
+  if (is_marked_epoch(&changed[r], epoch)) return;
+
+  parent pother = P[other];           // parent(other), exactly once
+  bool other_child = (P[pother] == pother);
+
+  // If other is child-of-root, live iff parents differ.
+  if (other_child && pother == r) return;
+
+  parent to = pother; // parent(other) (NOT root(other))
+  if (gbbs::CAS<parent>(&P[r], r, to)) {
+    // Receiver gets a new incoming edge only when receiver is a root (other_child).
+    if (other_child) mark_epoch(&changed[to], epoch);
+  }
+}
+
 inline DenseToEasyResult dense_to_easy(size_t n,
                                        const sequence<Edge>& original_edges,
                                        const GazitParams& params,
@@ -182,6 +229,7 @@ inline DenseToEasyResult dense_to_easy(size_t n,
   sequence<uint8_t> ext(n, static_cast<uint8_t>(1));
   sequence<uint8_t> changed(n, static_cast<uint8_t>(0));
   sequence<parent> Scratch(n);
+  sequence<size_t> sample;
 
   const double alpha = std::max(params.alpha, 1.0);
   const size_t P_budget =
@@ -200,17 +248,18 @@ inline DenseToEasyResult dense_to_easy(size_t n,
   };
 
   size_t round = 0;
+  uint8_t epoch = 0;
   while (true) {
     if (max_rounds > 0 && round >= max_rounds) break;
 
-    // Step 1: jump-over and mark non-star roots as changed.
-    gbbs::parallel_for(0, n, [&](size_t i) { changed[i] = static_cast<uint8_t>(0); });
+    epoch = advance_epoch(changed, epoch);
 
+    // Step 1: jump-over and mark non-star roots (epoch-stamped via atomic helpers; no per-iter clear).
     gbbs::parallel_for(0, n, [&](size_t i) {
       parent p = P[i];
       parent gp = P[p];
       if (p != gp && P[gp] == gp) {
-        set_flag1(&changed[gp]);
+        mark_epoch(&changed[gp], epoch);
       }
       Scratch[i] = gp;
     });
@@ -224,65 +273,58 @@ inline DenseToEasyResult dense_to_easy(size_t n,
     if (sample_size == 0) break;
 
     bool sample_all = sample_size == m;
-    sequence<size_t> sample;
     if (!sample_all) {
-      sample = sequence<size_t>(sample_size);
+      sample.resize(sample_size);
       parlay::random_generator gen(params.seed + static_cast<uint64_t>(round) * 0x9e3779b97f4a7c15ULL);
       gbbs::parallel_for(0, sample_size, [&](size_t i) {
-        auto r = gen[i];
-        sample[i] = static_cast<size_t>(r() % m);
+        sample[i] = static_cast<size_t>(gen[i]() % m);
       });
     }
 
     auto process_step2 = [&](const Edge& e) {
-      const auto [u, v] = e;
-      if (!(extparent(P, ext, u) && extparent(P, ext, v))) return;
-      if (!(child_of_root(P, u) && child_of_root(P, v))) return;
+      uintE u = e.first, v = e.second;
 
-      uintE ru = P[u];
-      uintE rv = P[v];
-      if (ru == rv) return;
+      parent pu = P[u];
+      parent pv = P[v];
 
-      uintE hi = (ru > rv) ? ru : rv;
-      uintE lo = hi ^ ru ^ rv;
+      // extparent guard (both endpoints extrovert)
+      if (ext[pu] == 0 || ext[pv] == 0) return;
 
-      if (gbbs::CAS<parent>(&P[hi], static_cast<parent>(hi), static_cast<parent>(lo))) {
-        set_flag1(&changed[lo]);
+      // both endpoints must be children-of-roots
+      if (P[pu] != pu || P[pv] != pv) return;
+
+      if (pu == pv) return;
+
+      parent hi = (pu > pv) ? pu : pv;
+      parent lo = (hi == pu) ? pv : pu;
+
+      if (gbbs::CAS<parent>(&P[hi], hi, lo)) {
+        mark_epoch(&changed[lo], epoch);
       }
     };
 
-    // Step 2: root-hook sampled edges.
+    // Step 2: root-hook sampled edges (minimized P[] loads; changed uses epoch+atomic helpers).
     if (sample_all) {
       gbbs::parallel_for(0, m, [&](size_t i) { process_step2(original_edges[i]); });
     } else {
       gbbs::parallel_for(0, sample_size, [&](size_t i) { process_step2(original_edges[sample[i]]); });
     }
 
-    auto try_star_side = [&](uintE from, uintE other) {
-      if (!child_of_root(P, from)) return;
-      uintE r = P[from];
-      if (load_flag(&changed[r]) != 0) return;
-
-      bool live = true;
-      if (child_of_root(P, other)) {
-        live = P[other] != r;
-      }
-      if (!live) return;
-
-      parent to = P[other];  // parent(other), not root(other)
-      if (gbbs::CAS<parent>(&P[r], static_cast<parent>(r), static_cast<parent>(to))) {
-        if (P[to] == to) {
-          set_flag1(&changed[to]);
-        }
-      }
-    };
-
     auto process_step3 = [&](const Edge& e) {
-      const auto [u, v] = e;
-      if (!(extparent(P, ext, u) && extparent(P, ext, v))) return;
-      // Step 3: star-hook using O(1) liveness (other endpoint's parent).
-      try_star_side(u, v);
-      try_star_side(v, u);
+      uintE u = e.first, v = e.second;
+
+      parent pu = P[u];
+      parent pv = P[v];
+
+      if (ext[pu] == 0 || ext[pv] == 0) return;
+
+      // Step 3: star-hook with minimized loads and epoch-stamped (atomic) changed flags.
+      if (P[pu] == pu) {
+        try_star_side_epoch(v, pu, P, changed, epoch);
+      }
+      if (P[pv] == pv) {
+        try_star_side_epoch(u, pv, P, changed, epoch);
+      }
     };
 
     if (sample_all) {
@@ -298,7 +340,7 @@ inline DenseToEasyResult dense_to_easy(size_t n,
     P.swap(Scratch);
 
     gbbs::parallel_for(0, n, [&](size_t i) {
-      if (P[i] == i && load_flag(&changed[i]) == 0) {
+      if (P[i] == i && !is_marked_epoch(&changed[i], epoch)) {
         ext[i] = static_cast<uint8_t>(0);
       }
     });
@@ -311,17 +353,31 @@ inline DenseToEasyResult dense_to_easy(size_t n,
 
   sequence<Edge> root_edges;
   {
-    sequence<bool> keep(m);
     auto mapped = sequence<Edge>::uninitialized(m);
+    auto flags = sequence<size_t>(m + 1, 0);
+
     gbbs::parallel_for(0, m, [&](size_t i) {
-      const auto [u, v] = original_edges[i];
+      auto [u, v] = original_edges[i];
       parent ru = P[u];
       parent rv = P[v];
-      mapped[i] = Edge{static_cast<uintE>(ru), static_cast<uintE>(rv)};
-      keep[i] = (ru != rv);
+      if (ru == rv) {
+        flags[i] = 0;
+      } else {
+        flags[i] = 1;
+        mapped[i] = Edge{static_cast<uintE>(ru), static_cast<uintE>(rv)};
+      }
     });
-    auto packed = parlay::pack(mapped, keep);
-    root_edges = std::move(packed);
+
+    size_t count = parlay::scan_inplace(parlay::make_slice(flags));
+    sequence<Edge> edges(count);
+
+    gbbs::parallel_for(0, m, [&](size_t i) {
+      if (flags[i] != flags[i + 1]) {
+        edges[flags[i]] = mapped[i];
+      }
+    });
+
+    root_edges = std::move(edges);
   }
 
   return DenseToEasyResult{std::move(P), std::move(root_edges)};
@@ -333,64 +389,54 @@ inline sequence<parent> easy_case_from(size_t n,
   sequence<parent> Scratch(n);
   sequence<uint8_t> changed(n, static_cast<uint8_t>(0));
   const size_t m = edges.size();
+  uint8_t epoch = 0;
 
   while (true) {
-    // Step 0: reset per-iteration flags.
-    gbbs::parallel_for(0, n, [&](size_t i) { changed[i] = static_cast<uint8_t>(0); });
+    epoch = advance_epoch(changed, epoch);
 
-    // Step 1: jump-over and mark non-star roots as changed.
+    // Step 1: jump-over and mark non-star roots (epoch-stamped via atomic helpers; no per-iter clear).
     gbbs::parallel_for(0, n, [&](size_t i) {
       parent p = P[i];
       parent gp = P[p];
       if (p != gp && P[gp] == gp) {
-        set_flag1(&changed[gp]);
+        mark_epoch(&changed[gp], epoch);
       }
       Scratch[i] = gp;
     });
     P.swap(Scratch);
 
-    // Step 2: root-hook on all edges.
+    // Step 2: root-hook on all edges (minimized P[] loads; epoch-stamped marks).
     gbbs::parallel_for(0, m, [&](size_t ei) {
-      const auto [u, v] = edges[ei];
-      if (!(child_of_root(P, u) && child_of_root(P, v))) return;
+      uintE u = edges[ei].first, v = edges[ei].second;
 
-      uintE ru = P[u];
-      uintE rv = P[v];
-      if (ru == rv) return;
+      parent pu = P[u];
+      parent pv = P[v];
 
-      uintE hi = (ru > rv) ? ru : rv;
-      uintE lo = hi ^ ru ^ rv;
-      if (gbbs::CAS<parent>(&P[hi], static_cast<parent>(hi), static_cast<parent>(lo))) {
-        set_flag1(&changed[lo]);
+      // both endpoints must be children-of-roots
+      if (P[pu] != pu || P[pv] != pv) return;
+
+      if (pu == pv) return;
+
+      parent hi = (pu > pv) ? pu : pv;
+      parent lo = (hi == pu) ? pv : pu;
+      if (gbbs::CAS<parent>(&P[hi], hi, lo)) {
+        mark_epoch(&changed[lo], epoch);
       }
     });
 
-    auto try_star_side = [&](uintE from, uintE other) {
-      if (!child_of_root(P, from)) return;
-      uintE r = P[from];
-      if (load_flag(&changed[r]) != 0) return;
-
-      // Step 3 liveness: if other is also child-of-root, edge live iff parents differ;
-      // otherwise treat as live (Lemma 3.1).
-      bool live = true;
-      if (child_of_root(P, other)) {
-        live = P[other] != r;
-      }
-      if (!live) return;
-
-      parent to = P[other];  // parent(other), not root(other)
-      if (gbbs::CAS<parent>(&P[r], static_cast<parent>(r), static_cast<parent>(to))) {
-        if (P[to] == to) {
-          set_flag1(&changed[to]);
-        }
-      }
-    };
-
-    // Step 3: star-hook on all edges with O(1) liveness.
+    // Step 3: star-hook on all edges with minimized loads and epoch-stamped (atomic) flags.
     gbbs::parallel_for(0, m, [&](size_t ei) {
-      const auto [u, v] = edges[ei];
-      try_star_side(u, v);
-      try_star_side(v, u);
+      uintE u = edges[ei].first, v = edges[ei].second;
+
+      parent pu = P[u];
+      parent pv = P[v];
+
+      if (P[pu] == pu) {
+        try_star_side_epoch(v, pu, P, changed, epoch);
+      }
+      if (P[pv] == pv) {
+        try_star_side_epoch(u, pv, P, changed, epoch);
+      }
     });
 
     // Step 4: jump-over.
@@ -1113,6 +1159,32 @@ template <class Graph>
 sequence<parent> CC(const Graph& G, GazitParams params = GazitParams()) {
   const size_t n = G.n;
 
+  if (params.skip_sparse_to_dense) {
+    std::cerr << "[gazit] skipping sparse_to_dense; using original graph"
+              << std::endl;
+
+    auto edges = parlay::map(G.edges(), [](const auto& entry) {
+      uintE u, v; gbbs::empty _;
+      std::tie(u, v, _) = entry;
+      return internal::Edge{u, v};
+    });
+
+    sequence<parent> P(n);
+    gbbs::parallel_for(0, n, [&](size_t i) {
+      P[i] = static_cast<parent>(i);
+    });
+
+    auto de = internal::dense_to_easy(n, edges, params, std::move(P));
+    auto parents =
+        internal::easy_case_from(n, de.root_edges, std::move(de.parents));
+
+    gbbs::parallel_for(0, n, [&](size_t i) {
+      internal::find_root(parents, static_cast<uintE>(i));
+    });
+
+    return parents;
+  }
+
   sequence<parent> P_sparse(n);
   gbbs::parallel_for(0, n, [&](size_t i) {
     P_sparse[i] = static_cast<parent>(i);
@@ -1121,28 +1193,14 @@ sequence<parent> CC(const Graph& G, GazitParams params = GazitParams()) {
   sequence<uintE> V;
   sequence<internal::Edge> E;
 
-  if (params.skip_sparse_to_dense) {
-    std::cerr << "[gazit] skipping sparse_to_dense; using original graph"
-              << std::endl;
-    V = sequence<uintE>(n);
-    gbbs::parallel_for(0, n, [&](size_t i) {
-      V[i] = static_cast<uintE>(i);
-    });
-    E = parlay::map(G.edges(), [](const auto& entry) {
-      uintE u, v; gbbs::empty _;
-      std::tie(u, v, _) = entry;
-      return internal::Edge{u, v};
-    });
-  } else {
-    std::cerr << "[gazit] edges before sparse_to_dense: " << G.m << std::endl;
+  std::cerr << "[gazit] edges before sparse_to_dense: " << G.m << std::endl;
 
-    std::cerr << "[gazit] vertices before sparse_to_dense: " << G.n
-              << std::endl;
+  std::cerr << "[gazit] vertices before sparse_to_dense: " << G.n
+            << std::endl;
 
-    auto dense_inputs = internal::sparse_to_dense(G, P_sparse);
-    V = std::move(dense_inputs.first);
-    E = std::move(dense_inputs.second);
-  }
+  auto dense_inputs = internal::sparse_to_dense(G, P_sparse);
+  V = std::move(dense_inputs.first);
+  E = std::move(dense_inputs.second);
 
 
   sequence<int> v_map(n, -1);
