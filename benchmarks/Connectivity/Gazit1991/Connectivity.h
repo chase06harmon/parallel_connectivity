@@ -475,25 +475,48 @@ inline int serial_1(uintE a, uintE b) {
   return __builtin_ctzll(diff);
 }
 
+struct MateScratch {
+  sequence<uint8_t> removed;
+  sequence<uintE>   in_deg;
+  sequence<uintE>   prev;
+  sequence<uint8_t> end_compression;
+  sequence<int>     next_new;
+
+  void resize_if_needed(size_t n) {
+    if (removed.size() >= n) return;
+      removed         = sequence<uint8_t>(n);
+      in_deg          = sequence<uintE>(n);
+      prev            = sequence<uintE>(n);
+      end_compression = sequence<uint8_t>(n);
+      next_new        = sequence<int>(n);
+    }
+};
+
 inline void deterministic_mate2(
   const sequence<uintE>& V_roots, // vertices currently under consideration (numbers)
   sequence<parent>& P, // global parent array
   sequence<int>& next, // global for vertices in v (all else -1)
   sequence<int>& mate_j, // the round in which v was mated (for later use by partitioning)
-  int j // the j round in partitioning
+  int j, // the j round in partitioning
+  MateScratch& scratch
+  
 ) {
   size_t n = P.size();
   size_t n_roots = V_roots.size();
 
-  sequence<uint8_t> removed(n, 0);
-  sequence<uintE> in_deg(n, 0);
+  auto& removed         = scratch.removed;
+  auto& in_deg          = scratch.in_deg;
+  auto& prev            = scratch.prev;
+  auto& end_compression = scratch.end_compression;
+  auto& next_new        = scratch.next_new;
 
-  sequence<uintE> prev(n, -1);
-
-  gbbs::parallel_for(0, n_roots, [&](size_t i) {
-    int v = V_roots[i];
-    prev[next[v]] = v;
-  });
+   gbbs::parallel_for(0, n_roots, [&](size_t i) {
+      uintE v = V_roots[i];
+      removed[v] = 0;
+      in_deg[v]  = 0;
+      prev[v]    = uintE(-1);
+      end_compression[v] = 0;
+    });
 
   // compute the in-degree from the next array
   gbbs::parallel_for(0, n_roots, [&](size_t i) {
@@ -517,7 +540,12 @@ inline void deterministic_mate2(
     }
   });
 
-  sequence<uint8_t> end_compression(n);
+  gbbs::parallel_for(0, n_roots, [&](size_t i) {
+    int v = V_roots[i];
+    if (!removed[next[v]])
+      prev[next[v]] = v;
+  });
+
 
   gbbs::parallel_for(0, n_roots, [&](size_t i) {
     uintE v = V_roots[i];
@@ -547,29 +575,24 @@ inline void deterministic_mate2(
     end_compression[v] = is_tail;
   });
 
-  sequence<int> next_cur = next;
-  sequence<int> next_new(n);
-
   for (int r = 0; r < (int)std::ceil(std::log2(std::log2((double)n_roots))); r++) {
     gbbs::parallel_for(0, n_roots, [&](size_t i) {
       uintE v = V_roots[i];
-      if (removed[v] || removed[next_cur[v]]) {
-        next_new[v] = next_cur[v];
+      if (removed[v] || removed[next[v]]) {
+        next_new[v] = next[v];
         return;
       }
 
-      if (end_compression[v] || end_compression[next_cur[v]]) {
-        next_new[v] = next_cur[v];
+      if (end_compression[v] || end_compression[next[v]]) {
+        next_new[v] = next[v];
         return;
       }
 
-      next_new[v] = next_cur[next_cur[v]];  // both reads are from old buffer
+      next_new[v] = next[next[v]];  // both reads are from old buffer
     });
 
-    std::swap(next_cur, next_new);
+    std::swap(next, next_new);
   }
-
-  next = std::move(next_cur);
 
   gbbs::parallel_for(0, n_roots, [&](size_t i) {
     uintE v = V_roots[i];
@@ -666,6 +689,32 @@ inline void reassign_edges(sequence<parent>& parents, sequence<Edge>& E) {
   E = parlay::filter(E, [&](Edge e) {return e.first != e.second;});
 }
 
+// Note:: Does not take out [x,x] edges
+inline void reassign_edges_to_parent(sequence<parent>& parents, sequence<Edge>& E) {
+  const size_t m = E.size();
+
+  // std::cout << "TESTER TESTER1" << std::endl;
+  // for (auto & [u,v] : E) {
+  //   if (u == 0 || v == 0) {
+  //     std::cout << u << ", " << v << std::endl;
+  //     break;
+  //   }
+  // }
+
+  // std::cout << "TESTER P[0]: " << parents[0] << std::endl;
+
+  gbbs::parallel_for(0, m, [&](size_t i) {
+    const auto [u, v] = E[i];
+    if (parents[u] == static_cast<parent>(-1) || parents[v] == static_cast<parent>(-1))
+      return;
+    E[i].first = parents[u];
+    E[i].second = parents[v];
+  });
+
+  E = parlay::remove_duplicates(E);
+  E = parlay::filter(E, [&](Edge e) {return e.first != e.second;});
+}
+
 struct PartitioningResult {
   sequence<int> extrovert_flag;
 };
@@ -686,6 +735,10 @@ inline PartitioningResult gazit_partitioning(
   sequence<parent> P(big_n, -1);
   sequence<int> mate_j(big_n,-1);
   sequence<int> flag(big_n, 0);
+
+  MateScratch scratch;
+  scratch.resize_if_needed(big_n);
+
 
   gbbs::parallel_for(0, n, [&](size_t i) {P[V[i]] = V[i];});
 
@@ -711,7 +764,7 @@ inline PartitioningResult gazit_partitioning(
 
     sequence<uintE> V_roots = parlay::filter(V, [&](uintE v) {return flag[v] == j+1;});
 
-    deterministic_mate2(V_roots, P, next, mate_j, j);
+    deterministic_mate2(V_roots, P, next, mate_j, j, scratch);
   }
 
   // int v_test = 0;
@@ -744,7 +797,7 @@ inline PartitioningResult gazit_partitioning(
   // }
 
   // reassign_edges(P, E_graph);
-  reassign_edges(P, E);
+  reassign_edges_to_parent(P, E);
 
   sequence<int> extrovert_flag = parlay::map(flag, [&](int x){ return x == rounds + 1 ? 1 : 0;});
 
@@ -832,8 +885,8 @@ std::pair<sequence<uintE>, sequence<Edge>> sparse_to_dense(Graph & G, sequence<p
     });
 
     if (i <= rounds -1) {
-      sequence<bool> introvert_not_isolated(n, 0);
-      sequence<bool> include_in_E_i(E_i.size(), 0);
+      sequence<uint8_t> introvert_not_isolated(n, 0);
+      sequence<uint8_t> include_in_E_i(E_i.size(), 0);
 
       gbbs::parallel_for(0, E_i.size(), [&](size_t i){
         auto [u,v] = E_i[i];
@@ -876,7 +929,7 @@ std::pair<sequence<uintE>, sequence<Edge>> sparse_to_dense(Graph & G, sequence<p
   // std::cout << "extro[0]" << extrovert_set[0] << std::endl;
 
 
-  reassign_edges(P, E);
+  reassign_edges_to_parent(P, E);
 
   gbbs::parallel_for(0, V_i.size(), [&](size_t i) {
     uintE v = V_i[i];

@@ -7,12 +7,7 @@ PERF_MODE="${PERF_MODE:-none}"
 DATASET="${1:-livejournal}"
 ROUNDS="${2:-1}"
 
-BAZEL_FLAGS=(
-  --macos_minimum_os=11.0
-  --cxxopt=-UPARLAY_USE_STD_ALLOC
-  --repo_env=CC=/usr/bin/clang
-  --repo_env=CXX=/usr/bin/clang++
-)
+BAZEL_FLAGS=(--macos_minimum_os=11.0 --cxxopt=-UPARLAY_USE_STD_ALLOC)
 
 # Add debug flags ONLY if perf recording is on
 if [[ "${PERF_MODE}" == "record" ]]; then
