@@ -75,6 +75,9 @@ inline uint8_t extparent(const sequence<parent>& P,
 inline void set_flag1(uint8_t* addr) {
   gbbs::atomic_store<uint8_t>(addr, static_cast<uint8_t>(1));
 }
+inline uint8_t load_flag(uint8_t* addr) {
+  return gbbs::atomic_load(addr);
+}
 inline sequence<parent> canonicalize_labels(const sequence<parent>& labels) {
   const size_t n = labels.size();
   if (n == 0) return sequence<parent>();
@@ -268,7 +271,7 @@ inline DenseToEasyResult dense_to_easy(size_t n,
     auto try_star_side = [&](uintE from, uintE other) {
       if (!child_of_root(P, from)) return;
       uintE r = P[from];
-      if (changed[r] != 0) return;
+      if (load_flag(&changed[r]) != 0) return;
 
       bool live = true;
       if (child_of_root(P, other)) {
@@ -305,7 +308,7 @@ inline DenseToEasyResult dense_to_easy(size_t n,
     P.swap(Scratch);
 
     gbbs::parallel_for(0, n, [&](size_t i) {
-      if (P[i] == i && changed[i] == 0) {
+      if (P[i] == i && load_flag(&changed[i]) == 0) {
         ext[i] = static_cast<uint8_t>(0);
       }
     });
@@ -375,7 +378,7 @@ inline sequence<parent> easy_case_from(size_t n,
     auto try_star_side = [&](uintE from, uintE other) {
       if (!child_of_root(P, from)) return;
       uintE r = P[from];
-      if (changed[r] != 0) return;
+      if (load_flag(&changed[r]) != 0) return;
 
       // Step 3 liveness: if other is also child-of-root, edge live iff parents differ;
       // otherwise treat as live (Lemma 3.1).
