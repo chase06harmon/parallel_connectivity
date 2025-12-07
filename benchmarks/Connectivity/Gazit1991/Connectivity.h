@@ -948,15 +948,22 @@ std::pair<sequence<uintE>, sequence<Edge>> sparse_to_dense(Graph & G, sequence<p
   //   return ! extrovert_set[i];
   // }));
 
-  // gbbs::parallel_for(0, E.size(), [&](size_t i){
-  //   auto [u, v] = E[i];
-  //   if (extrovert_set[u] && !extrovert_set[v]) {
-  //     P[v] = u;
-  //   } else if (extrovert_set[v] && !extrovert_set[u]) {
-  //     P[u] = v;
-  //   }
-  // });
+  gbbs::parallel_for(0, E.size(), [&](size_t i){
+    auto [u, v] = E[i];
+    if (P[v] == v && extrovert_set[u] && !extrovert_set[v]) {
+      P[v] = u;
+    } else if (P[u] == u && extrovert_set[v] && !extrovert_set[u]) {
+      P[u] = v;
+    }
+  });
 
+  gbbs::parallel_for(0, n, [&](size_t i){
+    P[i] = get_root(i, P);
+
+    if (!extrovert_set[i] && P[i] == i) { // could be introvert roots that are isolated since they mated at a lower round. excluded from introvert AND extrovert! 
+      extrovert_set[i] = 1;
+    }
+  });
   // std::cout << "P[0] final: " << P[0] << std::endl; // --
 
   // std::cout << "extro[0]" << extrovert_set[0] << std::endl;
@@ -968,10 +975,6 @@ std::pair<sequence<uintE>, sequence<Edge>> sparse_to_dense(Graph & G, sequence<p
     uintE v = V_i[i];
 
     extrovert_set[v] = 1;
-  });
-
-  gbbs::parallel_for(0, n, [&](size_t i){
-    P[i] = get_root(i, P);
   });
 
   V = parlay::pack(V, extrovert_set);
@@ -1158,41 +1161,33 @@ sequence<parent> CC(const Graph& G, GazitParams params = GazitParams()) {
     v_map[V[i]] = i;
   });
 
-  // for (int i = 0; i < n; i++) {
-  //   if (v_map[P[i]] == -1) {
-  //     std::cerr << "Didn't keep parent of " << i << ": " << P[i] << std::endl;
-  //     int num_edges = 0;
-  //     for (int j = 0; j < m2; j++) {
-  //       auto [u,v] = E[j];
-  //       if (u == i || v == i) {
-  //         std::cerr << "found edge: " << u << ", " << v << std::endl;
-  //         num_edges++;
-  //       }
-  //     }
-  //     std::cerr << "num edges containing i: " << num_edges << std::endl;
-  //     if (num_edges > 0) break;
-  //   }
-  // }
 
-  // for (auto & v : V) {
-  //   std::cout << v << ", ";
-  // }
+  std::unordered_set<int> v_bad;
 
-  // std::cout << "num edges"
+  for (int i = 0; i < E.size(); i++) {
+    auto [u,v] = E[i];
+    if (v_map[u] == -1) {
+      std::cout << u << ", " << v << std::endl;
+      v_bad.insert(u);
+    }
+    if (v_map[v] == -1) {
+      std::cout << u << ", " << v << std::endl;
+      v_bad.insert(v);
+    }
 
-  // for (auto & e : E) {
-  //   if (map[e.first] == -1 || map[e.second] == -1) {
-  //     std::cout << e.first << ", " << e.second << std::endl;
-  //     return P;
-  //   }
-  // }
+    // if (v_map[u] == -1 || v_map[v] == -1) {
+    //   E[i].first = 0;
+    //   E[i].second = 0;
+    // }
+  }
 
-  // for (auto & [u,v] : E) {
-  //   if (internal::get_root(u, P) != u || internal::get_root(v, P) != v) {
-  //     std::cerr << u << ", " << v << std::endl;
-  //     return P;
-  //   }
-  // }
+  // E = parlay::filter(E, [&](auto e) {return e.first != e.second;});
+
+  std::cerr << "bad v: " << v_bad.size() << std::endl;
+
+  for (auto & v : v_bad) {
+    std::cerr << "v: " << v << std::endl;
+  }
 
   std::cerr << "[gazit] edges before dense_to_easy: "
             << m2 << std::endl;
