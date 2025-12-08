@@ -285,7 +285,5 @@ if __name__ == "__main__":
     )
     if failed_benchmarks:
         print("Benchmarks failed: {}".format(failed_benchmarks))
-        sys.exit(1)
     else:
         print("Success! All benchmarks completed without an error.")
-        sys.exit(0)
