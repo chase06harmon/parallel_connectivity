@@ -145,7 +145,7 @@ def run_all_benchmarks(
     """
 
     BAZEL_FLAGS = ["--compilation_mode", "opt"]
-    gbbs_flags = ["-s", "-rounds", rounds]
+    gbbs_flags = ["-s", "-rounds", f" {rounds} "]
     if are_graphs_compressed:
         gbbs_flags += ["-c"]
 
