@@ -123,6 +123,7 @@ def run_all_benchmarks(
     weighted_graph_file: Optional[str],
     are_graphs_compressed: bool,
     timeout: Optional[int],
+    rounds: Optional[int],
 ) -> List[Tuple[str, str]]:
     """Runs all benchmarks, returning a list of failing benchmarks.
 
@@ -144,7 +145,7 @@ def run_all_benchmarks(
     """
 
     BAZEL_FLAGS = ["--compilation_mode", "opt"]
-    gbbs_flags = ["-s", "-rounds", "1"]
+    gbbs_flags = ["-s", "-rounds", rounds]
     if are_graphs_compressed:
         gbbs_flags += ["-c"]
 
@@ -184,11 +185,13 @@ def run_all_benchmarks(
 
     if unweighted_graph_file:
         for benchmark in unweighted_graph_benchmarks:
+            print(f"{"-"*30}\nStart {benchmark}\n")
             test_benchmark(
                 benchmark=benchmark,
                 graph_file=unweighted_graph_file,
                 additional_gbbs_flags=[],
             )
+            print(f"\nEnd {benchmark}\n{"-"*30}\n")
     if weighted_graph_file:
         for benchmark in weighted_graph_benchmarks:
             test_benchmark(
@@ -243,6 +246,15 @@ if __name__ == "__main__":
         default=60,
         help="(seconds) - Halt benchmarks that run longer than this time.",
     )
+
+    parser.add_argument(
+        "--rounds",
+        "-r",
+        type=float,
+        default=1,
+        help="rounds per benchmark.",
+    )
+
     parsed_args = parser.parse_args()
     if not parsed_args.unweighted_graph and not parsed_args.weighted_graph:
         parser.error(
@@ -267,6 +279,7 @@ if __name__ == "__main__":
         weighted_graph_file=weighted_graph_file,
         are_graphs_compressed=parsed_args.compressed,
         timeout=parsed_args.timeout,
+        rounds = parsed_args.rounds,
     )
     if failed_benchmarks:
         print("Benchmarks failed: {}".format(failed_benchmarks))
