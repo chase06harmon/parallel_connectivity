@@ -1,0 +1,176 @@
+
+=== com-orkut, 1 CPUs ===
+LabelPropagation: 3.34274
+SimpleUnionAsync: 0.949649
+WorkEfficientSDB14: 1.39076
+
+=== com-orkut, 2 CPUs ===
+LabelPropagation: 3.58769
+SimpleUnionAsync: 0.854634
+WorkEfficientSDB14: 1.87283
+
+=== com-orkut, 4 CPUs ===
+LabelPropagation: 1.45894
+SimpleUnionAsync: 0.455062
+WorkEfficientSDB14: 0.923134
+
+=== com-orkut, 8 CPUs ===
+LabelPropagation: 0.509157
+SimpleUnionAsync: 0.164481
+WorkEfficientSDB14: 0.279833
+
+=== com-orkut, 16 CPUs ===
+LabelPropagation: 0.291317
+SimpleUnionAsync: 0.0939108
+WorkEfficientSDB14: 0.137473
+
+=== com-orkut, 32 CPUs ===
+LabelPropagation: 0.162225
+SimpleUnionAsync: 0.0443192
+WorkEfficientSDB14: 0.0825876
+
+=== com-orkut, 64 CPUs ===
+LabelPropagation: 0.197889
+SimpleUnionAsync: 0.0464298
+WorkEfficientSDB14: 0.154079
+
+=== com-orkut, 96 CPUs ===
+LabelPropagation: 0.0327504
+SimpleUnionAsync: 0.0147738
+WorkEfficientSDB14: 0.0167524
+
+=== line, 1 CPUs ===
+
+=== line, 2 CPUs ===
+
+=== line, 4 CPUs ===
+
+=== line, 8 CPUs ===
+
+=== line, 16 CPUs ===
+
+=== line, 32 CPUs ===
+
+=== line, 64 CPUs ===
+
+=== line, 96 CPUs ===
+
+=== random, 1 CPUs ===
+LabelPropagation: 89.5439
+SimpleUnionAsync: 17.6854
+WorkEfficientSDB14: 27.504
+
+=== random, 2 CPUs ===
+LabelPropagation: 51.6077
+SimpleUnionAsync: 9.97751
+WorkEfficientSDB14: 18.8131
+
+=== random, 4 CPUs ===
+LabelPropagation: 25.7554
+SimpleUnionAsync: 5.06208
+WorkEfficientSDB14: 8.84157
+
+=== random, 8 CPUs ===
+LabelPropagation: 13.8432
+SimpleUnionAsync: 2.99694
+WorkEfficientSDB14: 4.21296
+
+=== random, 16 CPUs ===
+LabelPropagation: 5.72542
+SimpleUnionAsync: 1.22111
+WorkEfficientSDB14: 1.89401
+
+=== random, 32 CPUs ===
+LabelPropagation: 3.49123
+SimpleUnionAsync: 0.8093
+WorkEfficientSDB14: 1.3363
+
+=== random, 64 CPUs ===
+LabelPropagation: 2.55919
+SimpleUnionAsync: 0.789413
+WorkEfficientSDB14: 0.996
+
+=== random, 96 CPUs ===
+LabelPropagation: 1.83569
+SimpleUnionAsync: 0.637592
+WorkEfficientSDB14: 0.594833
+
+=== rmat, 1 CPUs ===
+LabelPropagation: 36.4747
+SimpleUnionAsync: 17.2718
+WorkEfficientSDB14: 29.017
+
+=== rmat, 2 CPUs ===
+LabelPropagation: 22.7854
+SimpleUnionAsync: 11.5002
+WorkEfficientSDB14: 22.0423
+
+=== rmat, 4 CPUs ===
+LabelPropagation: 11.4468
+SimpleUnionAsync: 4.93785
+WorkEfficientSDB14: 11.0088
+
+=== rmat, 8 CPUs ===
+LabelPropagation: 4.4686
+SimpleUnionAsync: 2.07179
+WorkEfficientSDB14: 3.42842
+
+=== rmat, 16 CPUs ===
+LabelPropagation: 2.17091
+SimpleUnionAsync: 0.934902
+WorkEfficientSDB14: 1.78362
+
+=== rmat, 32 CPUs ===
+LabelPropagation: 1.20382
+SimpleUnionAsync: 0.640958
+WorkEfficientSDB14: 1.03759
+
+=== rmat, 64 CPUs ===
+LabelPropagation: 0.918766
+SimpleUnionAsync: 0.59006
+WorkEfficientSDB14: 1.11267
+
+=== rmat, 96 CPUs ===
+LabelPropagation: 0.52697
+SimpleUnionAsync: 0.362285
+WorkEfficientSDB14: 0.514675
+
+=== rmat2, 1 CPUs ===
+LabelPropagation: 3.82548
+SimpleUnionAsync: 2.32882
+WorkEfficientSDB14: 1.53034
+
+=== rmat2, 2 CPUs ===
+LabelPropagation: 2.9737
+SimpleUnionAsync: 1.76289
+WorkEfficientSDB14: 1.31956
+
+=== rmat2, 4 CPUs ===
+LabelPropagation: 1.5876
+SimpleUnionAsync: 0.868236
+WorkEfficientSDB14: 0.68203
+
+=== rmat2, 8 CPUs ===
+LabelPropagation: 0.529468
+SimpleUnionAsync: 0.276117
+WorkEfficientSDB14: 0.206205
+
+=== rmat2, 16 CPUs ===
+LabelPropagation: 0.295673
+SimpleUnionAsync: 0.166338
+WorkEfficientSDB14: 0.132924
+
+=== rmat2, 32 CPUs ===
+LabelPropagation: 0.150746
+SimpleUnionAsync: 0.103455
+WorkEfficientSDB14: 0.0825476
+
+=== rmat2, 64 CPUs ===
+LabelPropagation: 0.186792
+SimpleUnionAsync: 0.101684
+WorkEfficientSDB14: 0.0815196
+
+=== rmat2, 96 CPUs ===
+LabelPropagation: 0.031265
+SimpleUnionAsync: 0.0229686
+WorkEfficientSDB14: 0.0155232
