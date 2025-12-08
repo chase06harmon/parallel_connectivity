@@ -185,13 +185,13 @@ def run_all_benchmarks(
 
     if unweighted_graph_file:
         for benchmark in unweighted_graph_benchmarks:
-            print(f"{"-"*30}\nStart {benchmark}\n")
+            print(f"{"-"*30}\nStart {benchmark}\n", file=sys.stderr)
             test_benchmark(
                 benchmark=benchmark,
                 graph_file=unweighted_graph_file,
                 additional_gbbs_flags=[],
             )
-            print(f"\nEnd {benchmark}\n{"-"*30}\n")
+            print(f"\nEnd {benchmark}\n{"-"*30}\n", file=sys.stderr)
     if weighted_graph_file:
         for benchmark in weighted_graph_benchmarks:
             test_benchmark(
