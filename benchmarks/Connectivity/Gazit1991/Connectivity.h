@@ -30,9 +30,9 @@ namespace gazit_cc {
 struct GazitParams {
   double alpha = 1.5;
   size_t processor_budget = 0;
-  size_t max_rounds = 0;
+  size_t max_rounds = 1;
   uint64_t seed = 5489;
-  bool skip_sparse_to_dense = true;
+  bool skip_sparse_to_dense = false;
 };
 
 struct ComparisonStats {

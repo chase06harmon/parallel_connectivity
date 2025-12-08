@@ -6,13 +6,14 @@ namespace gazit_cc {
 template <class Graph>
 double GazitRunner(Graph& G, commandLine P) {
   GazitParams params;
+
   params.alpha = P.getOptionDoubleValue("-alpha", params.alpha);
   params.processor_budget =
-      static_cast<size_t>(P.getOptionLongValue("-processor_budget", 0));
+      static_cast<size_t>(P.getOptionLongValue("-processor_budget", params.processor_budget));
   params.max_rounds =
-      static_cast<size_t>(P.getOptionLongValue("-max_rounds", 0));
-  params.seed = static_cast<uint64_t>(P.getOptionLongValue("-seed", 5489));
-  params.skip_sparse_to_dense = P.getOption("-skip_sparse_to_dense");
+      static_cast<size_t>(P.getOptionLongValue("-max_rounds", params.max_rounds));
+  params.seed = static_cast<uint64_t>(P.getOptionLongValue("-seed", params.seed));
+  params.skip_sparse_to_dense = P.getOptionIntValue("-skip_sparse_to_dense", params.skip_sparse_to_dense);
   
   double elapsed;
   
