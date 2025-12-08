@@ -14,6 +14,7 @@
 #include <thread>
 #include <barrier>
 #include <vector>
+#include <chrono>
 
 #include "benchmarks/Connectivity/WorkEfficientSDB14/Connectivity.h"
 #include "benchmarks/Connectivity/common.h"
@@ -1011,7 +1012,7 @@ sequence<parent> CC(const Graph& G, GazitParams params = GazitParams()) {
     });
 
     auto parents = internal::easy_case(n, edges);
-    
+
     gbbs::parallel_for(0, n, [&](size_t i) {
       internal::find_root(parents, static_cast<uintE>(i));
     });
@@ -1107,6 +1108,198 @@ sequence<parent> CC(const Graph& G, GazitParams params = GazitParams()) {
 
   return P_out;
 }
+
+template <class Graph>
+sequence<parent> CC_eval(const Graph& G, GazitParams params = GazitParams()) {
+  using clock = std::chrono::high_resolution_clock;
+  using seconds_d = std::chrono::duration<double>;
+
+  const size_t n = G.n;
+
+  // -----------------------------------------------------------------------
+  // easy_case_only configuration
+  // -----------------------------------------------------------------------
+  if (params.easy_case_only) {
+    double t_sparse_to_dense = 0.0;
+    double t_dense_to_easy   = 0.0;
+    double t_easy_case       = 0.0;
+
+    auto T0 = clock::now(); // total start
+
+    auto t0 = clock::now();
+
+    auto edges = parlay::map(G.edges(), [](const auto& entry) {
+      uintE u, v; gbbs::empty _;
+      std::tie(u, v, _) = entry;
+      return internal::Edge{u, v};
+    });
+
+    auto parents = internal::easy_case(n, edges);
+
+    auto t1 = clock::now();
+
+    gbbs::parallel_for(0, n, [&](size_t i) {
+      internal::find_root(parents, static_cast<uintE>(i));
+    });
+
+    auto t2 = clock::now();
+
+    t_easy_case = seconds_d(t2 - t0).count();
+
+    auto T1 = clock::now(); // total end
+    double t_total = seconds_d(T1 - T0).count();
+
+    std::cerr << "[gazit][timing][easy_case_only] "
+              << "sparse_to_dense=" << t_sparse_to_dense << "s, "
+              << "dense_to_easy="   << t_dense_to_easy   << "s, "
+              << "easy_case="       << t_easy_case       << "s, "
+              << "total="           << t_total           << "s"
+              << std::endl;
+
+    return parents;
+  }
+
+
+  // -----------------------------------------------------------------------
+  // skip_sparse_to_dense configuration
+  // -----------------------------------------------------------------------
+  if (params.skip_sparse_to_dense) {
+    double t_sparse_to_dense = 0.0;
+    double t_dense_to_easy   = 0.0;
+    double t_easy_case       = 0.0;
+
+    auto T0 = clock::now(); // total start
+
+    auto t0 = clock::now();
+
+    auto edges = parlay::map(G.edges(), [](const auto& entry) {
+      uintE u, v; gbbs::empty _;
+      std::tie(u, v, _) = entry;
+      return internal::Edge{u, v};
+    });
+
+    sequence<parent> P(n);
+    gbbs::parallel_for(0, n, [&](size_t i) {
+      P[i] = static_cast<parent>(i);
+    });
+
+    auto t1 = clock::now();
+
+    auto de = internal::dense_to_easy(n, edges, params, std::move(P));
+
+    auto t2 = clock::now();
+
+    auto parents =
+        internal::easy_case_from(n, de.root_edges, std::move(de.parents));
+
+    gbbs::parallel_for(0, n, [&](size_t i) {
+      internal::find_root(parents, static_cast<uintE>(i));
+    });
+
+    auto t3 = clock::now();
+
+    t_dense_to_easy = seconds_d(t2 - t1).count();
+    t_easy_case     = seconds_d(t3 - t2).count();
+
+    auto T1 = clock::now(); // total end
+    double t_total = seconds_d(T1 - T0).count();
+
+    std::cerr << "[gazit][timing][skip_sparse_to_dense] "
+              << "sparse_to_dense=" << t_sparse_to_dense << "s, "
+              << "dense_to_easy="   << t_dense_to_easy   << "s, "
+              << "easy_case="       << t_easy_case       << "s, "
+              << "total="           << t_total           << "s"
+              << std::endl;
+
+    return parents;
+  }
+
+
+  // -----------------------------------------------------------------------
+  // full pipeline configuration
+  // -----------------------------------------------------------------------
+  double t_sparse_to_dense = 0.0;
+  double t_dense_to_easy   = 0.0;
+  double t_easy_case       = 0.0;
+
+  auto T0 = clock::now(); // total start
+
+  auto t0 = clock::now();
+
+  sequence<parent> P_sparse(n);
+  gbbs::parallel_for(0, n, [&](size_t i) {
+    P_sparse[i] = static_cast<parent>(i);
+  });
+
+  sequence<uintE> V;
+  sequence<internal::Edge> E;
+
+  auto dense_inputs = internal::sparse_to_dense(G, P_sparse);
+  V = std::move(dense_inputs.first);
+  E = std::move(dense_inputs.second);
+
+  sequence<int> v_map(n, -1);
+  gbbs::parallel_for(0, V.size(), [&](size_t i) {
+    v_map[V[i]] = static_cast<int>(i);
+  });
+  size_t n2 = V.size();
+
+  sequence<bool> keep(E.size());
+  gbbs::parallel_for(0, E.size(), [&](size_t i){
+    auto [u, v] = E[i];
+    keep[i] = (u != v) && (v_map[u] >= 0) && (v_map[v] >= 0);
+  });
+  auto E2 = parlay::map(parlay::pack(E, keep), [&](internal::Edge e){
+    return internal::Edge{static_cast<uintE>(v_map[e.first]),
+                          static_cast<uintE>(v_map[e.second])};
+  });
+
+  auto t1 = clock::now();
+  t_sparse_to_dense = seconds_d(t1 - t0).count();
+
+
+  sequence<parent> P2(n2);
+  gbbs::parallel_for(0, n2, [&](size_t i) {
+    P2[i] = static_cast<parent>(i);
+  });
+
+  auto t2 = clock::now();
+
+  auto de = internal::dense_to_easy(n2, E2, params, std::move(P2));
+
+  auto t3 = clock::now();
+  t_dense_to_easy = seconds_d(t3 - t2).count();
+
+  auto P_small =
+      internal::easy_case_from(n2, de.root_edges, std::move(de.parents));
+
+  gbbs::parallel_for(0, n2, [&](size_t i) {
+    internal::find_root(P_small, static_cast<uintE>(i));
+  });
+
+  sequence<parent> P_out(n);
+  gbbs::parallel_for(0, n, [&](size_t i) {
+    parent sparse_root   = P_sparse[i];
+    parent compact_root  = P_small[static_cast<size_t>(v_map[sparse_root])];
+    P_out[i]             = V[static_cast<size_t>(compact_root)];
+  });
+
+  auto t4 = clock::now();
+  t_easy_case = seconds_d(t4 - t3).count();
+
+  auto T1 = clock::now(); // total end
+  double t_total = seconds_d(T1 - T0).count();
+
+  std::cerr << "[gazit][timing][full] "
+            << "sparse_to_dense=" << t_sparse_to_dense << "s, "
+            << "dense_to_easy="   << t_dense_to_easy   << "s, "
+            << "easy_case="       << t_easy_case       << "s, "
+            << "total="           << t_total           << "s"
+            << std::endl;
+
+  return P_out;
+}
+
 
 template <class Graph>
 ComparisonStats BenchmarkPair(Graph& G, double beta, bool permute,

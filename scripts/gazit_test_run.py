@@ -245,7 +245,7 @@ if __name__ == "__main__":
         "--timeout",
         "-t",
         type=float,
-        default=6000,
+        default=10000000000,
         help="(seconds) - Halt benchmarks that run longer than this time.",
     )
 
