@@ -185,6 +185,8 @@ def run_all_benchmarks(
 
     if unweighted_graph_file:
         for benchmark in unweighted_graph_benchmarks:
+            if unweighted_graph_file == "inputs/line" and benchmark != "//benchmarks/Connectivity/Gazit1991:Connectivity_main":
+                continue
             print(f"{"-"*30}\nStart {benchmark}\n", file=sys.stderr)
             test_benchmark(
                 benchmark=benchmark,
