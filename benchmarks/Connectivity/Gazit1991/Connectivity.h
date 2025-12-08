@@ -1010,14 +1010,8 @@ sequence<parent> CC(const Graph& G, GazitParams params = GazitParams()) {
       return internal::Edge{u, v};
     });
 
-    sequence<parent> P(n);
-    gbbs::parallel_for(0, n, [&](size_t i) {
-      P[i] = static_cast<parent>(i);
-    });
-
-    auto parents =
-        internal::easy_case(n, edges, P);
-
+    auto parents = internal::easy_case(n, edges);
+    
     gbbs::parallel_for(0, n, [&](size_t i) {
       internal::find_root(parents, static_cast<uintE>(i));
     });
