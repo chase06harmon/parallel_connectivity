@@ -14,6 +14,7 @@ double GazitRunner(Graph& G, commandLine P) {
       static_cast<size_t>(P.getOptionLongValue("-max_rounds", params.max_rounds));
   params.seed = static_cast<uint64_t>(P.getOptionLongValue("-seed", params.seed));
   params.skip_sparse_to_dense = P.getOptionIntValue("-skip_sparse_to_dense", params.skip_sparse_to_dense);
+  params.easy_case_only = P.getOptionIntValue("-easy_case_only", params.easy_case_only);
   
   double elapsed;
   

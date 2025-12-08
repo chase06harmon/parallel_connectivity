@@ -33,6 +33,7 @@ struct GazitParams {
   size_t max_rounds = 1;
   uint64_t seed = 5489;
   bool skip_sparse_to_dense = false;
+  bool easy_case_only = false;
 };
 
 struct ComparisonStats {
@@ -998,6 +999,31 @@ Proceed with dense-to-easy reduction and then the easy-case algorithm.
 template <class Graph>
 sequence<parent> CC(const Graph& G, GazitParams params = GazitParams()) {
   const size_t n = G.n;
+
+  if (params.easy_case_only) {
+    std::cerr << "[gazit] skipping sparse_to_dense; using original graph"
+              << std::endl;
+
+    auto edges = parlay::map(G.edges(), [](const auto& entry) {
+      uintE u, v; gbbs::empty _;
+      std::tie(u, v, _) = entry;
+      return internal::Edge{u, v};
+    });
+
+    sequence<parent> P(n);
+    gbbs::parallel_for(0, n, [&](size_t i) {
+      P[i] = static_cast<parent>(i);
+    });
+
+    auto parents =
+        internal::easy_case(n, edges, P);
+
+    gbbs::parallel_for(0, n, [&](size_t i) {
+      internal::find_root(parents, static_cast<uintE>(i));
+    });
+
+    return parents;
+  } 
 
   if (params.skip_sparse_to_dense) {
     std::cerr << "[gazit] skipping sparse_to_dense; using original graph"
