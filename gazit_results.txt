@@ -4,29 +4,29 @@
     avg sparse_to_dense = 18.028307s
     avg dense_to_easy   = 1.306428s
     avg easy_case       = 0.400539s
-    avg total           = 19.775615s
+    avg total           = 19.735274s
   [skip_sparse_to_dense] 50 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 1.979813s
     avg easy_case       = 0.124867s
-    avg total           = 2.626387s
+    avg total           = 2.104680s
   [easy_case_only] 50 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
     avg easy_case       = 2.903472s
-    avg total           = 2.903473s
+    avg total           = 2.903472s
 
 === com-orkut, 2 CPUs ===
   [full] 25 runs
     avg sparse_to_dense = 16.807492s
     avg dense_to_easy   = 1.427906s
     avg easy_case       = 0.473550s
-    avg total           = 18.758348s
+    avg total           = 18.708949s
   [skip_sparse_to_dense] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 2.059759s
     avg easy_case       = 0.106022s
-    avg total           = 2.790727s
+    avg total           = 2.165781s
   [easy_case_only] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -38,12 +38,12 @@
     avg sparse_to_dense = 10.048512s
     avg dense_to_easy   = 0.935055s
     avg easy_case       = 0.208588s
-    avg total           = 11.230767s
+    avg total           = 11.192154s
   [skip_sparse_to_dense] 27 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 1.242210s
     avg easy_case       = 0.050913s
-    avg total           = 1.774543s
+    avg total           = 1.293123s
   [easy_case_only] 27 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -55,12 +55,12 @@
     avg sparse_to_dense = 5.074887s
     avg dense_to_easy   = 0.497876s
     avg easy_case       = 0.088020s
-    avg total           = 5.673682s
+    avg total           = 5.660783s
   [skip_sparse_to_dense] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.707347s
     avg easy_case       = 0.021043s
-    avg total           = 1.039609s
+    avg total           = 0.728390s
   [easy_case_only] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -72,29 +72,29 @@
     avg sparse_to_dense = 3.208038s
     avg dense_to_easy   = 0.282045s
     avg easy_case       = 0.048352s
-    avg total           = 3.540982s
+    avg total           = 3.538436s
   [skip_sparse_to_dense] 5 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.465270s
     avg easy_case       = 0.011190s
-    avg total           = 0.669366s
+    avg total           = 0.476459s
   [easy_case_only] 5 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
     avg easy_case       = 0.562482s
-    avg total           = 0.562483s
+    avg total           = 0.562482s
 
 === com-orkut, 32 CPUs ===
   [full] 25 runs
     avg sparse_to_dense = 1.705971s
     avg dense_to_easy   = 0.179262s
     avg easy_case       = 0.015183s
-    avg total           = 1.900628s
+    avg total           = 1.900415s
   [skip_sparse_to_dense] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.257786s
     avg easy_case       = 0.002811s
-    avg total           = 0.379264s
+    avg total           = 0.260597s
   [easy_case_only] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -106,12 +106,12 @@
     avg sparse_to_dense = 1.287122s
     avg dense_to_easy   = 0.100147s
     avg easy_case       = 0.016780s
-    avg total           = 1.404284s
+    avg total           = 1.404048s
   [skip_sparse_to_dense] 5 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.157021s
     avg easy_case       = 0.003741s
-    avg total           = 0.246174s
+    avg total           = 0.160762s
   [easy_case_only] 5 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -123,12 +123,12 @@
     avg sparse_to_dense = 0.663632s
     avg dense_to_easy   = 0.055139s
     avg easy_case       = 0.006196s
-    avg total           = 0.725042s
+    avg total           = 0.724967s
   [skip_sparse_to_dense] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.066326s
     avg easy_case       = 0.001381s
-    avg total           = 0.101684s
+    avg total           = 0.067708s
   [easy_case_only] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -140,12 +140,12 @@
     avg sparse_to_dense = 319.603240s
     avg dense_to_easy   = 0.003773s
     avg easy_case       = 0.606934s
-    avg total           = 320.228320s
+    avg total           = 320.213947s
   [skip_sparse_to_dense] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 11.685624s
     avg easy_case       = 11.170091s
-    avg total           = 32.054104s
+    avg total           = 22.855715s
   [easy_case_only] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -157,12 +157,12 @@
     avg sparse_to_dense = 181.935880s
     avg dense_to_easy   = 0.001129s
     avg easy_case       = 0.354736s
-    avg total           = 182.292640s
+    avg total           = 182.291745s
   [skip_sparse_to_dense] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 6.660650s
     avg easy_case       = 5.732725s
-    avg total           = 17.813888s
+    avg total           = 12.393374s
   [easy_case_only] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -174,12 +174,12 @@
     avg sparse_to_dense = 109.597156s
     avg dense_to_easy   = 0.001008s
     avg easy_case       = 0.226875s
-    avg total           = 109.825067s
+    avg total           = 109.825039s
   [skip_sparse_to_dense] 27 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 4.087278s
     avg easy_case       = 3.412999s
-    avg total           = 10.654523s
+    avg total           = 7.500277s
   [easy_case_only] 27 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -191,12 +191,12 @@
     avg sparse_to_dense = 64.617784s
     avg dense_to_easy   = 0.000712s
     avg easy_case       = 0.166011s
-    avg total           = 64.784544s
+    avg total           = 64.784507s
   [skip_sparse_to_dense] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 2.391796s
     avg easy_case       = 1.788210s
-    avg total           = 6.014028s
+    avg total           = 4.180006s
   [easy_case_only] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -208,12 +208,12 @@
     avg sparse_to_dense = 39.940840s
     avg dense_to_easy   = 0.000556s
     avg easy_case       = 0.104249s
-    avg total           = 40.045660s
+    avg total           = 40.045646s
   [skip_sparse_to_dense] 5 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 1.498056s
     avg easy_case       = 1.129557s
-    avg total           = 3.745908s
+    avg total           = 2.627613s
   [easy_case_only] 5 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -225,12 +225,12 @@
     avg sparse_to_dense = 23.745768s
     avg dense_to_easy   = 0.001605s
     avg easy_case       = 0.068650s
-    avg total           = 23.816052s
+    avg total           = 23.816023s
   [skip_sparse_to_dense] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.878914s
     avg easy_case       = 0.606695s
-    avg total           = 2.184616s
+    avg total           = 1.485609s
   [easy_case_only] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -242,12 +242,12 @@
     avg sparse_to_dense = 15.939240s
     avg dense_to_easy   = 0.000861s
     avg easy_case       = 0.029025s
-    avg total           = 15.969180s
+    avg total           = 15.969126s
   [skip_sparse_to_dense] 5 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.561624s
     avg easy_case       = 0.408426s
-    avg total           = 1.399756s
+    avg total           = 0.970050s
   [easy_case_only] 5 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -259,12 +259,12 @@
     avg sparse_to_dense = 9.865177s
     avg dense_to_easy   = 0.000615s
     avg easy_case       = 0.022246s
-    avg total           = 9.888092s
+    avg total           = 9.888038s
   [skip_sparse_to_dense] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.241543s
     avg easy_case       = 0.195276s
-    avg total           = 0.649001s
+    avg total           = 0.436819s
   [easy_case_only] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -276,12 +276,12 @@
     avg sparse_to_dense = 296.160615s
     avg dense_to_easy   = 20.125185s
     avg easy_case       = 7.095088s
-    avg total           = 323.383000s
+    avg total           = 323.380888s
   [skip_sparse_to_dense] 13 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 80.216546s
     avg easy_case       = 24.656592s
-    avg total           = 109.108615s
+    avg total           = 104.873138s
   [easy_case_only] 13 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -293,12 +293,12 @@
     avg sparse_to_dense = 152.334600s
     avg dense_to_easy   = 10.133640s
     avg easy_case       = 3.468088s
-    avg total           = 165.937560s
+    avg total           = 165.936328s
   [skip_sparse_to_dense] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 41.264984s
     avg easy_case       = 12.103072s
-    avg total           = 55.840384s
+    avg total           = 53.368056s
   [easy_case_only] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -310,12 +310,12 @@
     avg sparse_to_dense = 84.979930s
     avg dense_to_easy   = 4.912768s
     avg easy_case       = 1.633194s
-    avg total           = 91.542974s
+    avg total           = 91.525892s
   [skip_sparse_to_dense] 27 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 21.243511s
     avg easy_case       = 6.177143s
-    avg total           = 28.925896s
+    avg total           = 27.420654s
   [easy_case_only] 27 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -327,12 +327,12 @@
     avg sparse_to_dense = 45.946028s
     avg dense_to_easy   = 2.866888s
     avg easy_case       = 0.948685s
-    avg total           = 49.774248s
+    avg total           = 49.761601s
   [skip_sparse_to_dense] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 10.865560s
     avg easy_case       = 2.924751s
-    avg total           = 14.705000s
+    avg total           = 13.790311s
   [easy_case_only] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -344,12 +344,12 @@
     avg sparse_to_dense = 26.918560s
     avg dense_to_easy   = 1.856542s
     avg easy_case       = 0.604390s
-    avg total           = 29.394640s
+    avg total           = 29.379492s
   [skip_sparse_to_dense] 5 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 5.873174s
     avg easy_case       = 1.645560s
-    avg total           = 8.090964s
+    avg total           = 7.518734s
   [easy_case_only] 5 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -361,12 +361,12 @@
     avg sparse_to_dense = 16.425396s
     avg dense_to_easy   = 0.908082s
     avg easy_case       = 0.300991s
-    avg total           = 17.636220s
+    avg total           = 17.634469s
   [skip_sparse_to_dense] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 3.593580s
     avg easy_case       = 0.843030s
-    avg total           = 4.837061s
+    avg total           = 4.436610s
   [easy_case_only] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -378,12 +378,12 @@
     avg sparse_to_dense = 13.735860s
     avg dense_to_easy   = 0.558546s
     avg easy_case       = 0.136033s
-    avg total           = 14.433420s
+    avg total           = 14.430439s
   [skip_sparse_to_dense] 5 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 2.777626s
     avg easy_case       = 0.506202s
-    avg total           = 3.572788s
+    avg total           = 3.283828s
   [easy_case_only] 5 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -395,12 +395,12 @@
     avg sparse_to_dense = 10.317598s
     avg dense_to_easy   = 0.314149s
     avg easy_case       = 0.093396s
-    avg total           = 10.725508s
+    avg total           = 10.725143s
   [skip_sparse_to_dense] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 2.242302s
     avg easy_case       = 0.317242s
-    avg total           = 2.721450s
+    avg total           = 2.559544s
   [easy_case_only] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -412,12 +412,12 @@
     avg sparse_to_dense = 233.226000s
     avg dense_to_easy   = 33.553700s
     avg easy_case       = 6.157782s
-    avg total           = 273.199800s
+    avg total           = 272.937482s
   [skip_sparse_to_dense] 5 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 41.926920s
     avg easy_case       = 1.491236s
-    avg total           = 48.113140s
+    avg total           = 43.418156s
   [easy_case_only] 5 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -429,12 +429,12 @@
     avg sparse_to_dense = 121.935000s
     avg dense_to_easy   = 17.134552s
     avg easy_case       = 2.753930s
-    avg total           = 141.969040s
+    avg total           = 141.823482s
   [skip_sparse_to_dense] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 21.541412s
     avg easy_case       = 0.850250s
-    avg total           = 25.080388s
+    avg total           = 22.391662s
   [easy_case_only] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -446,12 +446,12 @@
     avg sparse_to_dense = 67.347667s
     avg dense_to_easy   = 9.293029s
     avg easy_case       = 1.578446s
-    avg total           = 78.318956s
+    avg total           = 78.219141s
   [skip_sparse_to_dense] 27 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 11.533504s
     avg easy_case       = 0.518560s
-    avg total           = 13.692215s
+    avg total           = 12.052064s
   [easy_case_only] 27 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -463,12 +463,12 @@
     avg sparse_to_dense = 36.277688s
     avg dense_to_easy   = 5.464613s
     avg easy_case       = 0.846657s
-    avg total           = 42.645112s
+    avg total           = 42.588958s
   [skip_sparse_to_dense] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 6.149325s
     avg easy_case       = 0.237444s
-    avg total           = 7.398942s
+    avg total           = 6.386770s
   [easy_case_only] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -480,29 +480,29 @@
     avg sparse_to_dense = 20.340400s
     avg dense_to_easy   = 2.754494s
     avg easy_case       = 0.484998s
-    avg total           = 23.598820s
+    avg total           = 23.579892s
   [skip_sparse_to_dense] 5 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 3.208728s
     avg easy_case       = 0.129807s
-    avg total           = 3.956256s
+    avg total           = 3.338535s
   [easy_case_only] 5 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
     avg easy_case       = 5.285648s
-    avg total           = 5.285650s
+    avg total           = 5.285648s
 
 === rmat, 32 CPUs ===
   [full] 25 runs
     avg sparse_to_dense = 11.623484s
     avg dense_to_easy   = 1.499538s
     avg easy_case       = 0.264716s
-    avg total           = 13.398700s
+    avg total           = 13.387738s
   [skip_sparse_to_dense] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 1.767268s
     avg easy_case       = 0.067400s
-    avg total           = 2.259095s
+    avg total           = 1.834668s
   [easy_case_only] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -514,12 +514,12 @@
     avg sparse_to_dense = 8.875864s
     avg dense_to_easy   = 0.977923s
     avg easy_case       = 0.143727s
-    avg total           = 10.002764s
+    avg total           = 9.997515s
   [skip_sparse_to_dense] 5 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 1.171872s
     avg easy_case       = 0.040480s
-    avg total           = 1.505468s
+    avg total           = 1.212352s
   [easy_case_only] 5 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -531,12 +531,12 @@
     avg sparse_to_dense = 5.590386s
     avg dense_to_easy   = 0.631781s
     avg easy_case       = 0.078277s
-    avg total           = 6.304627s
+    avg total           = 6.300444s
   [skip_sparse_to_dense] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.786247s
     avg easy_case       = 0.024844s
-    avg total           = 0.961418s
+    avg total           = 0.811091s
   [easy_case_only] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -548,12 +548,12 @@
     avg sparse_to_dense = 41.622000s
     avg dense_to_easy   = 1.855702s
     avg easy_case       = 0.804073s
-    avg total           = 44.424800s
+    avg total           = 44.281775s
   [skip_sparse_to_dense] 5 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 6.734690s
     avg easy_case       = 0.126725s
-    avg total           = 8.369544s
+    avg total           = 6.861415s
   [easy_case_only] 5 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -565,12 +565,12 @@
     avg sparse_to_dense = 21.506328s
     avg dense_to_easy   = 0.939515s
     avg easy_case       = 0.214024s
-    avg total           = 22.704120s
+    avg total           = 22.659868s
   [skip_sparse_to_dense] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 3.601024s
     avg easy_case       = 0.050635s
-    avg total           = 4.467399s
+    avg total           = 3.651659s
   [easy_case_only] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -582,12 +582,12 @@
     avg sparse_to_dense = 12.540196s
     avg dense_to_easy   = 0.580828s
     avg easy_case       = 0.102704s
-    avg total           = 13.246356s
+    avg total           = 13.223728s
   [skip_sparse_to_dense] 27 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 2.193844s
     avg easy_case       = 0.041594s
-    avg total           = 2.829315s
+    avg total           = 2.235437s
   [easy_case_only] 27 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -599,12 +599,12 @@
     avg sparse_to_dense = 6.975588s
     avg dense_to_easy   = 0.341682s
     avg easy_case       = 0.023307s
-    avg total           = 7.347214s
+    avg total           = 7.340577s
   [skip_sparse_to_dense] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 1.300035s
     avg easy_case       = 0.019106s
-    avg total           = 1.738750s
+    avg total           = 1.319141s
   [easy_case_only] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -616,12 +616,12 @@
     avg sparse_to_dense = 3.811954s
     avg dense_to_easy   = 0.175970s
     avg easy_case       = 0.014218s
-    avg total           = 4.004664s
+    avg total           = 4.002141s
   [skip_sparse_to_dense] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.764090s
     avg easy_case       = 0.001640s
-    avg total           = 1.051678s
+    avg total           = 0.765729s
   [easy_case_only] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -633,29 +633,29 @@
     avg sparse_to_dense = 2.356835s
     avg dense_to_easy   = 0.113430s
     avg easy_case       = 0.009883s
-    avg total           = 2.481375s
+    avg total           = 2.480148s
   [skip_sparse_to_dense] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.476665s
     avg easy_case       = 0.002198s
-    avg total           = 0.670531s
+    avg total           = 0.478862s
   [easy_case_only] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
     avg easy_case       = 0.518994s
-    avg total           = 0.518995s
+    avg total           = 0.518994s
 
 === rmat2, 64 CPUs ===
   [full] 5 runs
     avg sparse_to_dense = 1.543144s
     avg dense_to_easy   = 0.060584s
     avg easy_case       = 0.010935s
-    avg total           = 1.615002s
+    avg total           = 1.614662s
   [skip_sparse_to_dense] 5 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.295024s
     avg easy_case       = 0.001112s
-    avg total           = 0.432680s
+    avg total           = 0.296136s
   [easy_case_only] 5 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
@@ -667,12 +667,12 @@
     avg sparse_to_dense = 0.911516s
     avg dense_to_easy   = 0.037658s
     avg easy_case       = 0.004699s
-    avg total           = 0.953978s
+    avg total           = 0.953873s
   [skip_sparse_to_dense] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.140016s
     avg easy_case       = 0.001172s
-    avg total           = 0.210213s
+    avg total           = 0.141188s
   [easy_case_only] 25 runs
     avg sparse_to_dense = 0.000000s
     avg dense_to_easy   = 0.000000s
