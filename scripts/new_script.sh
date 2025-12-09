@@ -5,57 +5,67 @@ set -euo pipefail
 # Compatible with bash 3.2+ (macOS default).
 PERF_MODE="${PERF_MODE:-none}"
 DATASET="${1:-livejournal}"
-ROUNDS="${2:-1}"
+ROUNDS="${3:-1}"
 
-BAZEL_FLAGS=(--macos_minimum_os=11.0 --cxxopt=-UPARLAY_USE_STD_ALLOC)
 
-# Add debug flags ONLY if perf recording is on
-if [[ "${PERF_MODE}" == "record" ]]; then
-  echo "[perf] Enabling debug build for perf record"
-  BAZEL_FLAGS+=(
-    --compilation_mode=dbg
-    --cxxopt=-fno-omit-frame-pointer
-    --copt=-fno-omit-frame-pointer
-    --strip=never
-  )
-fi
+BAZEL_FLAGS=(--cxxopt=-UPARLAY_USE_STD_ALLOC)
 
+case "$PERF_MODE" in
+  none)
+    # (default bazel build) — optimized but no debug symbols
+    BAZEL_FLAGS+=(
+      --compilation_mode=opt
+    )
+    ;;
+
+  record)
+    # Optimized build, but with debug symbols for perf
+    BAZEL_FLAGS+=(
+      --compilation_mode=opt
+      --strip=never
+      --copt=-g
+      --cxxopt=-g
+      --copt=-fno-omit-frame-pointer
+      --cxxopt=-fno-omit-frame-pointer
+    )
+    ;;
+
+  *)
+    echo "Unknown MODE='$MODE' (expected fast|debug|perf)" >&2
+    exit 1
+    ;;
+esac
 
 WORKSPACE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SNAP_DIR="${WORKSPACE_DIR}/snap_inputs"
 TIMING_DIR="${WORKSPACE_DIR}/timings"
 
-declare SNAP_URL SNAP_FILE SNAP_CONVERTER_FLAGS SNAP_IS_DIRECTED RAW_PATH
+mkdir -p "${SNAP_DIR}" "${TIMING_DIR}"
+
+declare SNAP_URL SNAP_FILE RAW_PATH
 NEEDS_CONVERSION=true
 NEEDS_COMPRESSED=true
+CONVERT_FROM_CSV=false
 
 case "${DATASET}" in
   livejournal|soc-LiveJournal1)
     SNAP_URL="https://snap.stanford.edu/data/soc-LiveJournal1.txt.gz"
     SNAP_FILE="soc-LiveJournal1.txt"
-    SNAP_CONVERTER_FLAGS=(--symmetric)
-    SNAP_IS_DIRECTED=false
     RAW_PATH="${SNAP_DIR}/${SNAP_FILE}"
     ;;
   twitter|twitter2010|twitter_rv)
     SNAP_URL="https://snap.stanford.edu/data/twitter.tar.gz"
     SNAP_FILE="twitter_rv.net"
-    SNAP_CONVERTER_FLAGS=(--symmetric)
-    SNAP_IS_DIRECTED=false
     RAW_PATH="${SNAP_DIR}/${SNAP_FILE}"
     ;;
   friendster)
     SNAP_URL="https://snap.stanford.edu/data/com-Friendster.txt.gz"
     SNAP_FILE="com-Friendster.txt"
-    SNAP_CONVERTER_FLAGS=(--symmetric)
-    SNAP_IS_DIRECTED=false
     RAW_PATH="${SNAP_DIR}/${SNAP_FILE}"
     ;;
   toy_triangles|triangles)
     SNAP_URL=""
     SNAP_FILE="triangles"
-    SNAP_CONVERTER_FLAGS=(--symmetric)
-    SNAP_IS_DIRECTED=false
     RAW_PATH="${WORKSPACE_DIR}/inputs/triangles.txt"
     NEEDS_CONVERSION=false
     NEEDS_COMPRESSED=false
@@ -63,8 +73,6 @@ case "${DATASET}" in
   toy_star|star)
     SNAP_URL=""
     SNAP_FILE="star"
-    SNAP_CONVERTER_FLAGS=(--symmetric)
-    SNAP_IS_DIRECTED=false
     RAW_PATH="${WORKSPACE_DIR}/inputs/star.txt"
     NEEDS_CONVERSION=false
     NEEDS_COMPRESSED=false
@@ -72,32 +80,24 @@ case "${DATASET}" in
   wiki-vote|wiki_vote)
     SNAP_URL="https://snap.stanford.edu/data/wiki-Vote.txt.gz"
     SNAP_FILE="wiki-Vote.txt"
-    SNAP_CONVERTER_FLAGS=(--symmetric)
-    SNAP_IS_DIRECTED=false
     RAW_PATH="${SNAP_DIR}/${SNAP_FILE}"
     NEEDS_COMPRESSED=false
     ;;
   ego-facebook|facebook|facebook_combined)
     SNAP_URL="https://snap.stanford.edu/data/facebook_combined.txt.gz"
     SNAP_FILE="facebook_combined.txt"
-    SNAP_CONVERTER_FLAGS=(--symmetric)
-    SNAP_IS_DIRECTED=false
     RAW_PATH="${SNAP_DIR}/${SNAP_FILE}"
     NEEDS_COMPRESSED=false
     ;;
   epinions|soc-epinions1)
     SNAP_URL="https://snap.stanford.edu/data/soc-Epinions1.txt.gz"
     SNAP_FILE="soc-Epinions1.txt"
-    SNAP_CONVERTER_FLAGS=(--symmetric)
-    SNAP_IS_DIRECTED=false
     RAW_PATH="${SNAP_DIR}/${SNAP_FILE}"
     NEEDS_COMPRESSED=false
     ;;
   ego-twitter|twitter_combined)
     SNAP_URL="https://snap.stanford.edu/data/twitter_combined.txt.gz"
     SNAP_FILE="twitter_combined.txt"
-    SNAP_CONVERTER_FLAGS=(--symmetric)
-    SNAP_IS_DIRECTED=false
     RAW_PATH="${SNAP_DIR}/${SNAP_FILE}"
     NEEDS_COMPRESSED=false
     ;;
@@ -105,8 +105,6 @@ case "${DATASET}" in
     SNAP_URL="https://snap.stanford.edu/data/git_web_ml.zip"
     SNAP_FILE="git_web_ml/musae_git_edges.csv"
     LOCAL_CSV_NAME="musae_git_edges.csv"
-    SNAP_CONVERTER_FLAGS=(--symmetric)
-    SNAP_IS_DIRECTED=false
     RAW_PATH="${SNAP_DIR}/${LOCAL_CSV_NAME}"
     NEEDS_COMPRESSED=false
     CONVERT_FROM_CSV=true
@@ -118,12 +116,13 @@ case "${DATASET}" in
     ;;
 esac
 
-mkdir -p "${SNAP_DIR}" "${TIMING_DIR}"
-
 if [[ -z "${RAW_PATH}" ]]; then
   RAW_PATH="${SNAP_DIR}/${SNAP_FILE}"
 fi
 
+# --------------------------------------------------------------------
+# Fetch / materialize the raw SNAP graph
+# --------------------------------------------------------------------
 if [[ -n "${SNAP_URL}" ]]; then
   if [[ "${SNAP_URL}" == *.tar.gz ]]; then
     TAR_ARCHIVE="${SNAP_DIR}/$(basename "${SNAP_URL}")"
@@ -159,7 +158,6 @@ if [[ -n "${SNAP_URL}" ]]; then
     fi
     if [[ ! -f "${RAW_PATH}" ]]; then
       echo "Extracting ${SNAP_FILE} from ${ZIP_ARCHIVE} -> ${RAW_PATH}"
-      # Use the inner path SNAP_FILE (e.g., git_web_ml/musae_git_edges.csv)
       unzip -p "${ZIP_ARCHIVE}" "${SNAP_FILE}" > "${RAW_PATH}"
     fi
   else
@@ -172,13 +170,13 @@ else
   echo "Using local graph ${RAW_PATH}"
 fi
 
-
 if [[ ! -f "${RAW_PATH}" ]]; then
   echo "Failed to materialize raw SNAP graph at ${RAW_PATH}" >&2
   exit 1
 fi
 
-if [[ "${CONVERT_FROM_CSV:-false}" == true ]]; then
+# CSV -> edge list (.txt) for github
+if [[ "${CONVERT_FROM_CSV}" == true ]]; then
   CSV_SOURCE="${RAW_PATH}"
   GRAPH_NAME="$(basename "${CSV_SOURCE}" .csv)"
   EDGE_LIST_TXT="${SNAP_DIR}/${GRAPH_NAME}.txt"
@@ -192,6 +190,9 @@ fi
 GRAPH_BASENAME="$(basename "${RAW_PATH}" .txt)"
 GRAPH_BASENAME="${GRAPH_BASENAME%.net}"
 
+# --------------------------------------------------------------------
+# Convert to adjacency / compressed formats (if requested)
+# --------------------------------------------------------------------
 if [[ "${NEEDS_CONVERSION}" == true ]]; then
   ADJ_GRAPH="${SNAP_DIR}/${GRAPH_BASENAME}.adj"
   COMPRESSED_GRAPH="${SNAP_DIR}/${GRAPH_BASENAME}.bp"
@@ -214,7 +215,7 @@ if [[ "${NEEDS_CONVERSION}" == true ]]; then
   if [[ ! -f "${ADJ_GRAPH}" ]]; then
     echo "Converting to adjacency format -> ${ADJ_GRAPH}"
     ./bazel-bin/utils/snap_converter \
-      "-s" \
+      -s \
       -i "${RAW_PATH}" \
       -o "${ADJ_GRAPH}"
   fi
@@ -231,15 +232,15 @@ else
   COMPRESSED_GRAPH=""
 fi
 
-echo "Building connectivity benchmarks..."
+# --------------------------------------------------------------------
+# Build Gazit connectivity benchmark only
+# --------------------------------------------------------------------
+echo "Building Gazit1991 connectivity benchmark..."
 bazel build "${BAZEL_FLAGS[@]}" \
-  //benchmarks/Connectivity/WorkEfficientSDB14:Connectivity_main \
-  //benchmarks/Connectivity/Gazit1991:Connectivity_main \
-  //benchmarks/Connectivity/Gazit1991:Comparison_main
+  //benchmarks/Connectivity/Gazit1991:Connectivity_main
 
-WORK_LOG_DIR="${TIMING_DIR}/${GRAPH_BASENAME}/workefficient"
 GAZIT_LOG_DIR="${TIMING_DIR}/${GRAPH_BASENAME}/gazit"
-mkdir -p "${WORK_LOG_DIR}" "${GAZIT_LOG_DIR}"
+mkdir -p "${GAZIT_LOG_DIR}"
 
 run_and_log() {
   local binary_path="$1"
@@ -249,33 +250,23 @@ run_and_log() {
   echo "Running ${binary_path} $*" | tee "${log_path}"
   case "${PERF_MODE}" in
     none)
-      # Original behavior
       /usr/bin/env time -p "${binary_path}" "$@" 2>&1 | tee -a "${log_path}"
       ;;
-
     stat)
-      # perf stat on this run; perf stats go to a separate .perf.stat file
       local perf_out="${log_path%.log}.perf.stat"
       echo "  [perf stat -> ${perf_out}]" | tee -a "${log_path}"
-
       perf stat -d -d -d \
         -o "${perf_out}" \
-        -- "/usr/bin/env" time -p "${binary_path}" "$@" \
+        -- /usr/bin/env time -p "${binary_path}" "$@" \
         2>&1 | tee -a "${log_path}"
       ;;
-
     record)
-      # perf record sampling profile; raw data to .perf.data
       local perf_data="${log_path%.log}.perf.data"
       echo "  [perf record -> ${perf_data}]" | tee -a "${log_path}"
-
-      # This will NOT include /usr/bin/env time (perf focuses on the binary).
-      # If you still want timing, rely on perf's task-clock / elapsed time.
       perf record -g -F 999 \
         -o "${perf_data}" \
         -- "${binary_path}" "$@" 2>&1 | tee -a "${log_path}"
       ;;
-
     *)
       echo "Unknown PERF_MODE='${PERF_MODE}', expected one of: none, stat, record" >&2
       exit 1
@@ -285,41 +276,24 @@ run_and_log() {
   echo >> "${log_path}"
 }
 
-compare_outputs() {
-  local graph_path="$1"
-  shift
-  local extra_flags=($@)
-
-  "${WORKSPACE_DIR}/bazel-bin/benchmarks/Connectivity/Gazit1991/Comparison_main" \
-    "${extra_flags[@]}" "${graph_path}" >/dev/null
-}
-
+# --------------------------------------------------------------------
+# Run Gazit1991/Connectivity_main on adjacency / compressed graphs
+# --------------------------------------------------------------------
 COMMON_FLAGS=(-s -rounds "${ROUNDS}")
-if [[ -f "${ADJ_GRAPH}" ]]; then
-  compare_outputs "${ADJ_GRAPH}" "${COMMON_FLAGS[@]}"
-  run_and_log \
-    "${WORKSPACE_DIR}/bazel-bin/benchmarks/Connectivity/WorkEfficientSDB14/Connectivity_main" \
-    "${WORK_LOG_DIR}/adjacency.log" \
-    "${COMMON_FLAGS[@]}" "${ADJ_GRAPH}"
+GAZIT_BIN="${WORKSPACE_DIR}/bazel-bin/benchmarks/Connectivity/Gazit1991/Connectivity_main"
 
+if [[ -f "${ADJ_GRAPH}" ]]; then
   run_and_log \
-    "${WORKSPACE_DIR}/bazel-bin/benchmarks/Connectivity/Gazit1991/Connectivity_main" \
+    "${GAZIT_BIN}" \
     "${GAZIT_LOG_DIR}/adjacency.log" \
     "${COMMON_FLAGS[@]}" "${ADJ_GRAPH}"
 fi
 
-if [[ -f "${COMPRESSED_GRAPH}" ]]; then
-  compare_outputs "${COMPRESSED_GRAPH}" -s -rounds 1 -c -m
-
+if [[ -n "${COMPRESSED_GRAPH:-}" && -f "${COMPRESSED_GRAPH}" ]]; then
   run_and_log \
-    "${WORKSPACE_DIR}/bazel-bin/benchmarks/Connectivity/WorkEfficientSDB14/Connectivity_main" \
-    "${WORK_LOG_DIR}/compressed.log" \
-    -s -c -m -rounds "${ROUNDS}" "${COMPRESSED_GRAPH}"
-
-  run_and_log \
-    "${WORKSPACE_DIR}/bazel-bin/benchmarks/Connectivity/Gazit1991/Connectivity_main" \
+    "${GAZIT_BIN}" \
     "${GAZIT_LOG_DIR}/compressed.log" \
     -s -c -m -rounds "${ROUNDS}" "${COMPRESSED_GRAPH}"
 fi
 
-echo "Logs written under ${TIMING_DIR}/${GRAPH_BASENAME}"
+echo "Logs written under ${GAZIT_LOG_DIR}"

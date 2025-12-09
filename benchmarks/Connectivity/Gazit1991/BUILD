@@ -21,6 +21,12 @@ cc_binary(
 )
 
 cc_binary(
+    name = "Gazit_eval",
+    srcs = ["StageEval.cc"],
+    deps = [":Connectivity"],
+)
+
+cc_binary(
     name = "Comparison_main",
     srcs = ["Comparison.cc"],
     deps = [":Connectivity"],

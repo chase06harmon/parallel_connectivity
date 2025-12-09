@@ -7,18 +7,15 @@ template <class Graph>
 double GazitRunner(Graph& G, commandLine P) {
   GazitParams params;
 
-  params.alpha = P.getOptionDoubleValue("-alpha", params.alpha);
-  params.processor_budget =
-      static_cast<size_t>(P.getOptionLongValue("-processor_budget", params.processor_budget));
-  params.max_rounds =
-      static_cast<size_t>(P.getOptionLongValue("-max_rounds", params.max_rounds));
-  params.seed = static_cast<uint64_t>(P.getOptionLongValue("-seed", params.seed));
-  params.skip_sparse_to_dense = P.getOptionIntValue("-skip_sparse_to_dense", params.skip_sparse_to_dense);
-  params.easy_case_only = P.getOptionIntValue("-easy_case_only", params.easy_case_only);
+    params.alpha = P.getOptionDoubleValue("-alpha", params.alpha);
+    params.processor_budget =
+        static_cast<size_t>(P.getOptionLongValue("-processor_budget", params.processor_budget));
+    params.max_rounds =
+        static_cast<size_t>(P.getOptionLongValue("-max_rounds", params.max_rounds));
+    params.seed = static_cast<uint64_t>(P.getOptionLongValue("-seed", params.seed));
   
-  double elapsed;
+    double elapsed;
   
-  for (int i = 0; i < 1; i++) {
     std::cout << "### Application: GazitCC" << std::endl;
     std::cout << "### Graph: " << P.getArgument(0) << std::endl;
     std::cout << "### Threads: " << num_workers() << std::endl;
@@ -34,15 +31,22 @@ double GazitRunner(Graph& G, commandLine P) {
 
     timer t;
     t.start();
-    auto components = CC(G, params);
+    CC_eval(G, params);
+    params.skip_sparse_to_dense = true;
+
+    CC_eval(G, params);
+
+    params.easy_case_only = true;
+
+    CC_eval(G, params);
+
     elapsed = t.stop();
-    components.clear();
 
     std::cout << "### Running Time: " << elapsed << std::endl;
     if (P.getOption("-stats")) {
       std::cout << "# (stats collection not implemented yet)" << std::endl;
     }
-  }
+
 
   return elapsed;
 }
